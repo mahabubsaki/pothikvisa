@@ -1,0 +1,110 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-page: #FFFFFF;
+    --bg-subtle: #FAFAFA;
+    --bg-surface: #FFFFFF;
+    --border-subtle: #EAEAEA;
+    --border-strong: #D4D4D8;
+    --text-primary: #0A0A0A;
+    --text-secondary: #525252;
+    --text-muted: #737373;
+    --accent: #0070F3;
+    --accent-emerald: #059669;
+  }
+
+  body {
+    background-color: var(--bg-page);
+    color: var(--text-primary);
+    font-family: var(--font-sans), var(--font-bangla), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    min-height: 100dvh;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+  }
+
+  .font-serif {
+    font-family: var(--font-serif), Georgia, serif;
+  }
+
+  .font-bangla {
+    font-family: var(--font-bangla), 'Hind Siliguri', sans-serif;
+  }
+
+  code, pre, kbd {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    text-wrap: balance;
+    letter-spacing: -0.025em;
+  }
+
+  html[lang="bn"],
+  html[lang="bn"] body,
+  .font-bangla {
+    font-family: var(--font-bangla), 'Hind Siliguri', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    letter-spacing: normal !important;
+  }
+
+  html[lang="bn"] h1,
+  html[lang="bn"] h2,
+  html[lang="bn"] h3,
+  html[lang="bn"] h4,
+  html[lang="bn"] h5,
+  html[lang="bn"] h6,
+  .font-bangla h1,
+  .font-bangla h2,
+  .font-bangla h3 {
+    letter-spacing: 0 !important;
+    line-height: 1.35 !important;
+    text-rendering: geometricPrecision;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+}
+
+/* Subtle Hairline Background Grid Pattern */
+.vercel-grid {
+  background-size: 32px 32px;
+  background-image: 
+    linear-gradient(to right, rgba(0, 0, 0, 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.035) 1px, transparent 1px);
+}
+
+/* Crisp Card Shadow */
+.vercel-card {
+  background-color: #FFFFFF;
+  border: 1px solid #EAEAEA;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.vercel-card:hover {
+  border-color: #0A0A0A;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+}
+
+/* Subtle Radial Header Glow */
+.vercel-radial {
+  background: radial-gradient(circle at 50% 0%, rgba(0, 0, 0, 0.025) 0%, transparent 60%);
+}
+
+/* Realistic Consular Stamp Style for Unique Tangible Feel */
+.consular-stamp {
+  border: 2px dashed #059669;
+  color: #047857;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  transform: rotate(-1.5deg);
+  background-color: rgba(5, 150, 105, 0.04);
+}

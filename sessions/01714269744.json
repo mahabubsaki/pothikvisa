@@ -1,0 +1,7 @@
+{
+  "cookies": [],
+  "localStorage": {
+    "auth-storage": "{\"state\":{\"token\":\"eyJraWQiOiJpYW0tand0LXJzYS0xIiwidHlwIjoiSldUIiwiYWxnIjoiUlMyNTYifQ.eyJzdWIiOiI5NzlkY2I4Yy0zMWJhLTQ4MDEtOTBjNy1kNTcxZWJhNWE0YzYiLCJhdWQiOiJpYW1zLWFwaSIsInBob25lIjoiMDE3MTQyNjk3NDQiLCJpc3MiOiJpYW1zIiwiZXhwIjoxNzkxMTEyMTY3LCJpYXQiOjE3OTExMTEyNjcsImp0aSI6ImJmYTRkZTI4LWQ4MTEtNDZkYi1iY2JhLTBiOTYwYjUwODIyZCIsInNpZCI6Ijg3YmQ0ODQ5LTRiYzUtNGU2ZS1iY2M5LTFhNmRlYjJkZmZhYiJ9.OLBHTssY-iZhEvD_XHNduxtLvejnT_bGf5kMWLSouQfnEjC6YUhYv95ODQlW3k5PfiNv57EbfS_YlKdvMv6sahNCOx944XKlRwMKpLUb88ykqFlh7qkQb3jQsqbV3ZxKk_1ETMOYIMlBarrd-rUpMFeUG0QFExEeUbcJy-rEFj4K29U-lyDEEly_bkpg4JAJFmAXXDUumkJeyBGD-XGJ3H9QNfd2M0yulJuDz8wb86q6KyMMj51MqOLVVvlxJaTcdeAnGkqRJGbHV_4LuHQFZFsV3R21BTBnTT4Qi_WpNjDZBae5LyDc_ON2garLFx4sXmmRw63InLFSfE6-ZnTEug\",\"userId\":\"979dcb8c-31ba-4801-90c7-d571eba5a4c6\",\"expiresAt\":899,\"isAuthenticated\":true,\"isVerified\":true,\"requestId\":null,\"phone\":\"01714269744\",\"password\":null,\"otpSentAt\":1791111267314,\"hasHydrated\":true},\"version\":0}"
+  },
+  "timestamp": 1791111280094
+}

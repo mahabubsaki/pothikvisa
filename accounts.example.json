@@ -1,0 +1,20 @@
+[
+  {
+    "id": "candidate_1",
+    "name": "Candidate 1",
+    "phone": "01621430853",
+    "password": "atik154242@A",
+    "pdfPath": "C:\\Users\\SAKI\\Downloads\\BGDDW1EF0826MD000915-2.pdf",
+    "preferredDate": "28",
+    "dateOrder": "latest",
+    "avoidDates": ["15"]
+  },
+  {
+    "id": "candidate_2",
+    "name": "Candidate 2",
+    "phone": "01714269744",
+    "password": "@Iloveumonia1",
+    "pdfPath": "C:\\Users\\SAKI\\Downloads\\BGDDW1EF0826MD000915-2.pdf",
+    "dateOrder": "latest"
+  }
+]
