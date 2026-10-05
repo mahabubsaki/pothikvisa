@@ -32,3 +32,4 @@ downloads/
 .next
 .playwright-mcp
 .wrangler
+.env.production
