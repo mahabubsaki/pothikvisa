@@ -1,122 +1,95 @@
 import { NextResponse } from 'next/server';
-import { getAuthenticatedUser } from '@/lib/currentAuth';
+import { requirePermission } from '@/lib/currentAuth';
+import { apiErrorResponse } from '@/lib/api-error';
 import {
-  getUserSubscription,
-  getSavedProfileById,
   createApplication,
   enqueueApplication,
   getApplicationQueuePosition,
+  getSavedProfileById,
+  updateApplication,
 } from '@/lib/db';
 import { triggerQueueWorker } from '@/services/automationQueue';
+import { downloadR2Buffer, uploadBufferToStorage } from '@/lib/r2';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function POST(req: Request) {
+export async function POST(request: Request) {
   try {
-    const user = await getAuthenticatedUser();
-    if (!user) {
-      return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
+    const user = await requirePermission('applications.batch');
+    const body = await request.json() as { profileIds?: unknown };
+    if (!Array.isArray(body.profileIds) || body.profileIds.length === 0) {
+      return NextResponse.json({ error: 'Select at least one saved profile.' }, { status: 400 });
     }
 
-    const sub = getUserSubscription(user.id);
-    const isAgencyOrAdmin = user.role === 'admin' || sub?.plan === 'agency';
-
-    if (!isAgencyOrAdmin) {
-      return NextResponse.json(
-        {
-          error: 'UPGRADE_REQUIRED',
-          message: 'মাল্টি-অ্যাপ্লিক্যান্ট ব্যাচ প্রসেসিং ফিচারটি শুধুমাত্র Agency Pro প্ল্যানের জন্য সংরক্ষিত। অনুগ্রহ করে প্ল্যান আপগ্রেড করুন।',
-        },
-        { status: 403 }
-      );
+    const profileIds = [...new Set(body.profileIds.filter((id): id is string => typeof id === 'string'))];
+    if (profileIds.length === 0 || profileIds.length > 50) {
+      return NextResponse.json({ error: 'A batch must contain between 1 and 50 profiles.' }, { status: 400 });
     }
 
-    const body = await req.json();
-    const { profileIds } = body;
-
-    if (!profileIds || !Array.isArray(profileIds) || profileIds.length === 0) {
-      return NextResponse.json(
-        {
-          error: 'INVALID_REQUEST',
-          message: 'ব্যাচ প্রসেসিংয়ের জন্য অনুগ্রহ করে কমপক্ষে একটি ক্লায়েন্ট প্রোফাইল নির্বাচন করুন।',
-        },
-        { status: 400 }
-      );
-    }
-
-    const createdApplications: Array<{
-      id: string;
-      applicantName: string;
-      passportNumber: string;
-      queuePosition: number;
-      estimatedWaitMinutes: number;
-    }> = [];
-
+    const applications = [];
     for (const profileId of profileIds) {
-      const savedProf = getSavedProfileById(profileId, user.id);
-      if (!savedProf) continue;
+      const savedProfile = getSavedProfileById(profileId, user.id);
+      if (!savedProfile) continue;
 
-      let formData: any = {};
+      let formData: Record<string, unknown>;
       try {
-        formData = JSON.parse(savedProf.data_json);
-      } catch (err) {
-        console.warn(`Failed to parse profile data for ${profileId}:`, err);
+        formData = JSON.parse(savedProfile.data_json) as Record<string, unknown>;
+      } catch {
         continue;
       }
 
-      const applicantName = savedProf.profile_name || 'APPLICANT';
-      const passportNumber = savedProf.passport_number || 'NA';
-      const visaType = formData.step1_registration?.visaPurpose || '544';
-
-      // 1. Create application record in database
-      const app = createApplication({
+      const registration = formData.step1_registration as { visaPurpose?: string } | undefined;
+      const application = createApplication({
         userId: user.id,
-        applicantName,
-        passportNumber,
-        visaType,
-        photoUrl: formData.photoUrl || null,
-        passportPdfUrl: formData.passportPdfUrl || null,
+        applicantName: savedProfile.profile_name || 'APPLICANT',
+        passportNumber: savedProfile.passport_number || 'NA',
+        visaType: registration?.visaPurpose || '544',
         formData,
       });
 
-      // 2. Enqueue with Agency Pro Rank 1 (Top Priority)
-      enqueueApplication(app.id, 1);
-      const qPos = getApplicationQueuePosition(app.id);
+      const media: { photo_url?: string; passport_pdf_url?: string } = {};
+      try {
+        const photo = await downloadR2Buffer(`profiles/${profileId}/photo.jpg`);
+        media.photo_url = (await uploadBufferToStorage({
+          key: `applications/${application.id}/photo.jpg`,
+          buffer: photo,
+          contentType: 'image/jpeg',
+        })).url;
+      } catch {}
+      try {
+        const passport = await downloadR2Buffer(`profiles/${profileId}/passport.pdf`);
+        media.passport_pdf_url = (await uploadBufferToStorage({
+          key: `applications/${application.id}/passport.pdf`,
+          buffer: passport,
+          contentType: 'application/pdf',
+        })).url;
+      } catch {}
+      if (media.photo_url || media.passport_pdf_url) updateApplication(application.id, media);
 
-      createdApplications.push({
-        id: app.id,
-        applicantName,
-        passportNumber,
-        queuePosition: qPos.position,
-        estimatedWaitMinutes: qPos.estimatedWaitMinutes,
+      enqueueApplication(application.id, 1);
+      const position = getApplicationQueuePosition(application.id);
+      applications.push({
+        id: application.id,
+        applicantName: application.applicant_name,
+        passportNumber: application.passport_number,
+        queuePosition: position.position,
+        estimatedWaitMinutes: position.estimatedWaitMinutes,
       });
     }
 
-    if (createdApplications.length === 0) {
-      return NextResponse.json(
-        {
-          error: 'NO_VALID_PROFILES',
-          message: 'কোনো কার্যকর ক্লায়েন্ট প্রোফাইল পাওয়া যায়নি।',
-        },
-        { status: 400 }
-      );
+    if (applications.length === 0) {
+      return NextResponse.json({ error: 'No valid profiles were found.' }, { status: 400 });
     }
 
-    // 3. Trigger sequential priority worker in background
-    triggerQueueWorker().catch((err) => {
-      console.error('[Batch Run] Worker trigger error:', err);
-    });
-
+    void triggerQueueWorker().catch((error) => console.error('[Batch Run] Worker error:', error));
     return NextResponse.json({
       success: true,
-      message: `সাফল্যের সাথে ${createdApplications.length}টি আবেদন Agency Pro প্রায়োরিটি কিউতে যোগ করা হয়েছে (র‍্যাংক ১)।`,
-      count: createdApplications.length,
-      applications: createdApplications,
+      message: `${applications.length} applications were added to the paid priority queue.`,
+      count: applications.length,
+      applications,
     });
   } catch (error: unknown) {
-    console.error('Batch applications error:', error);
-    const message = error instanceof Error ? error.message : 'Failed to batch process profiles';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiErrorResponse(error, 'Failed to batch process profiles');
   }
 }

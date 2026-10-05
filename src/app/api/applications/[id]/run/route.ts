@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
-import { getAuthenticatedUser } from '@/lib/currentAuth';
+import { requireApplicationAccess } from '@/lib/currentAuth';
+import { apiErrorResponse } from '@/lib/api-error';
 import {
-  getApplicationById,
-  getUserSubscription,
+  hasRemainingQuota,
   getPlanPriorityRank,
   getApplicationQueuePosition,
 } from '@/lib/db';
@@ -16,24 +16,12 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const profile = await getAuthenticatedUser();
-    if (!profile) {
-      return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
-    }
-
     const { id } = await params;
-    const application = getApplicationById(id);
-    if (!application) {
-      return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
-    }
-
-    if (application.user_id !== profile.id && profile.role !== 'admin') {
-      return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
-    }
+    const { user: profile, application } = await requireApplicationAccess(id, 'applications.run');
 
     // Verify subscription and quota
-    const sub = getUserSubscription(profile.id);
-    if (!sub || (sub.plan !== 'agency' && sub.quota_used >= sub.quota_total)) {
+    const sub = profile.subscription;
+    if (!profile.isAdmin && !hasRemainingQuota(sub)) {
       return NextResponse.json(
         {
           error: 'QUOTA_EXCEEDED',
@@ -61,29 +49,28 @@ export async function POST(
       });
     }
 
-    // Priority Rank: 1 = Agency Pro, 2 = Standard, 3 = Starter, 4 = Free
+    if (application.status === 'completed') {
+      return NextResponse.json(
+        { error: 'ALREADY_COMPLETED', message: 'This application has already completed.' },
+        { status: 409 }
+      );
+    }
+
+    // Priority Rank: 1 = paid, 2 = free.
     const priorityRank = getPlanPriorityRank(sub?.plan);
     const queueInfo = await enqueueAndProcess(id, priorityRank);
 
-    const rankLabel =
-      priorityRank === 1
-        ? 'Agency Pro প্রায়োরিটি কিউ (র‍্যাংক ১ - সর্বোচ্চ অগ্রাধিকার)'
-        : priorityRank === 2
-        ? 'Standard কিউ (র‍্যাংক ২)'
-        : priorityRank === 3
-        ? 'Starter কিউ (র‍্যাংক ৩)'
-        : 'ফ্রি ট্রায়াল কিউ (র‍্যাংক ৪)';
+    const rankLabel = priorityRank === 1 ? 'paid priority queue' : 'free queue';
 
     return NextResponse.json({
       success: true,
-      message: `${rankLabel}-এ সফলভাবে যোগ করা হয়েছে। আপনার অবস্থান #${queueInfo.position}।`,
+      message: `Added to the ${rankLabel}. Your position is #${queueInfo.position}.`,
       status: 'queued',
       queuePosition: queueInfo.position,
       estimatedWaitMinutes: queueInfo.estimatedWaitMinutes,
       priorityRank,
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Failed to trigger automation';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiErrorResponse(error, 'Failed to trigger automation');
   }
 }

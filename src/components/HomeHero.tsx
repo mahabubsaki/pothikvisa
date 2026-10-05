@@ -26,11 +26,11 @@ export function HomeHero() {
             className="lg:col-span-7 space-y-6"
           >
             
-            {/* Live Indicator Pill & Free Trial Callout */}
+            {/* Live indicator and Free access callout */}
             <div className="flex flex-wrap items-center gap-2.5">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-300 text-xs font-bold text-emerald-800 shadow-2xs">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span>{isBn ? '🎁 সাইন আপ করলেই ৩টি ওয়েব ফাইল সম্পূর্ণ ফ্রি!' : '🎁 3 Free Web Files on Sign Up!'}</span>
+                <span>{isBn ? '🎁 অনুমোদনের পর প্রতিদিন ৩টি ফ্রি ওয়েব ফাইল!' : '🎁 3 Free Web Files Per Day After Approval'}</span>
               </div>
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FAFAFA] border border-[#EAEAEA] text-[11px] font-semibold text-[#555555]">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
@@ -84,7 +84,7 @@ export function HomeHero() {
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3.5 pt-3">
               <Button asChild size="lg" className="rounded-full h-12 px-7 bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md">
                 <Link href="/sign-up">
-                  <span>{isBn ? '৩টি ফ্রি ফাইলসহ শুরু করুন' : 'Get 3 Free Web Files'}</span>
+                  <span>{isBn ? 'অনুমোদনের পর প্রতিদিন ৩টি ফ্রি ফাইল' : '3 Free Files Per Day After Approval'}</span>
                   <ArrowRight className="w-4 h-4 ml-1.5" />
                 </Link>
               </Button>
@@ -97,8 +97,8 @@ export function HomeHero() {
 
             <p className="text-xs text-[#666666] pt-1">
               {isBn
-                ? '🎁 সাইন আপেই ৩টি ফ্রি ফাইল • এরপর সাশ্রয়ী প্যাকেজ মাত্র ১৫০ ৳ (৭৫টি ফাইল) ও ৩০০ ৳ (২০০টি ফাইল) • বিকাশ/নগদে তাৎক্ষণিক অ্যাক্টিভেশন'
-                : '🎁 3 Free Web Files on signup • Plans starting at 150 ৳ (75 files) & 300 ৳ (200 files) • Instant bKash & Nagad activation'}
+                ? '🎁 অ্যাডমিন অনুমোদনের পর ৩টি ফ্রি ফাইল • পেইডে আনলিমিটেড ফাইল ও সব ফিচার • বিকাশ/নগদ পেমেন্ট'
+                : '🎁 3 free files after admin approval • Paid includes unlimited files and every feature • bKash & Nagad payment'}
             </p>
           </motion.div>
 

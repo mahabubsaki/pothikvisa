@@ -24,12 +24,17 @@ export async function executeStep3(
 
   // Auto-suppress / auto-accept any modal popups (e.g. Grandparent Pakistan prompt)
   await page.evaluate(() => {
+    (window as any).__portalAlerts = [];
     window.confirm = (msg?: string) => {
       console.log('[Step 3 Auto-confirmed]:', msg);
       return true;
     };
     window.alert = (msg?: string) => {
       console.log('[Step 3 Auto-dismissed]:', msg);
+      if (msg) {
+        (window as any).__portalAlerts = (window as any).__portalAlerts || [];
+        (window as any).__portalAlerts.push(msg);
+      }
     };
   });
 
@@ -192,7 +197,12 @@ export async function executeStep3(
   // 4. Marital Status & Grandparents
   await page.evaluate((data: { marital: string; grandPakistan: boolean; grandDetails?: string }) => {
     window.confirm = () => true;
-    window.alert = () => {};
+    window.alert = (msg?: string) => {
+      if (msg) {
+        (window as any).__portalAlerts = (window as any).__portalAlerts || [];
+        (window as any).__portalAlerts.push(msg);
+      }
+    };
 
     const win = window as unknown as IndianVisaPortalWindow;
     const maritalEl = document.getElementById('marital_status') as HTMLSelectElement;

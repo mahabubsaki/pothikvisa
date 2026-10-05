@@ -15,7 +15,9 @@
     "ivac": "tsx src/run-ivac.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "seed": "tsx src/scripts/seed.ts"
+    "test": "node --import tsx --test src/lib/access-policy.test.ts src/lib/db-access.test.ts src/lib/storage.test.ts",
+    "seed": "tsx src/scripts/seed.ts",
+    "queue:worker": "tsx src/scripts/queue-worker.ts"
   },
   "keywords": [
     "stagehand",

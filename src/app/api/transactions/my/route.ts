@@ -1,13 +1,11 @@
 import { NextResponse } from 'next/server';
-import { getAuthenticatedUser } from '@/lib/currentAuth';
+import { requireAuthenticatedUser } from '@/lib/currentAuth';
+import { apiErrorResponse } from '@/lib/api-error';
 import { getUserTransactions } from '@/lib/db';
 
 export async function GET() {
   try {
-    const profile = await getAuthenticatedUser();
-    if (!profile) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const profile = await requireAuthenticatedUser();
 
     const transactions = getUserTransactions(profile.id);
 
@@ -16,7 +14,6 @@ export async function GET() {
       transactions,
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Failed to fetch transactions';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiErrorResponse(error, 'Failed to fetch transactions');
   }
 }

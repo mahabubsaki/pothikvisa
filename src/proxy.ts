@@ -3,7 +3,9 @@ import { NextResponse } from 'next/server';
 
 const isProtectedRoute = createRouteMatcher([
   '/dashboard(.*)',
+  '/apply(.*)',
   '/applications(.*)',
+  '/pending-approval(.*)',
   '/admin(.*)',
   '/api/admin(.*)',
 ]);

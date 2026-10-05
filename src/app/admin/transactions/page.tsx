@@ -33,7 +33,7 @@ interface AdminTransaction {
   user_id: string;
   user_name?: string;
   user_email?: string;
-  plan: 'starter' | 'standard' | 'agency';
+  plan: 'paid';
   amount: number;
   mfs_method: 'bkash' | 'nagad' | 'rocket';
   sender_phone: string;

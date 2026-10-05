@@ -8,13 +8,36 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
-const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID || 'cbbf25b9adfdabd7b6b2a000d043c6d4';
+const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID || '';
 const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID || '';
 const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY || '';
 const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME || 'pothikvisa-documents';
-const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL || '';
 
 let s3ClientInstance: S3Client | null = null;
+const LOCAL_STORAGE_ROOT = path.resolve(
+  process.env.POTHIKVISA_STORAGE_ROOT?.trim() || path.join(process.cwd(), 'data', 'uploads')
+);
+
+function normalizeStorageKey(key: string): string {
+  const normalized = key.replace(/\\/g, '/').trim();
+  if (
+    !normalized ||
+    normalized.startsWith('/') ||
+    normalized.split('/').includes('..') ||
+    !/^[A-Za-z0-9][A-Za-z0-9/_.-]*$/.test(normalized)
+  ) {
+    throw new Error('INVALID_STORAGE_KEY');
+  }
+  return normalized;
+}
+
+function getLocalStoragePath(key: string): string {
+  const target = path.resolve(LOCAL_STORAGE_ROOT, normalizeStorageKey(key));
+  if (!target.startsWith(`${LOCAL_STORAGE_ROOT}${path.sep}`)) {
+    throw new Error('INVALID_STORAGE_KEY');
+  }
+  return target;
+}
 
 /**
  * Checks whether Cloudflare R2 credentials are fully configured.
@@ -65,7 +88,8 @@ export async function uploadBufferToStorage(params: {
   buffer: Buffer;
   contentType: string;
 }): Promise<R2UploadResult> {
-  const { key, buffer, contentType } = params;
+  const { buffer, contentType } = params;
+  const key = normalizeStorageKey(params.key);
 
   // 1. If R2 is configured, upload to Cloudflare R2
   if (isR2Configured()) {
@@ -80,14 +104,10 @@ export async function uploadBufferToStorage(params: {
         })
       );
 
-      const url = R2_PUBLIC_URL
-        ? `${R2_PUBLIC_URL.replace(/\/$/, '')}/${key}`
-        : `https://${R2_BUCKET_NAME}.${R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${key}`;
-
       console.log(`☁️ [R2] Uploaded object: ${key} (${buffer.length} bytes)`);
       return {
         key,
-        url,
+        url: `storage:${key}`,
         storage: 'r2',
         size: buffer.length,
       };
@@ -98,15 +118,14 @@ export async function uploadBufferToStorage(params: {
   }
 
   // 2. Local disk fallback
-  const uploadsDir = path.resolve(process.cwd(), 'public', 'uploads');
-  const targetPath = path.join(uploadsDir, key);
+  const targetPath = getLocalStoragePath(key);
   fs.mkdirSync(path.dirname(targetPath), { recursive: true });
   fs.writeFileSync(targetPath, buffer);
 
   console.log(`💾 [Local Storage] Saved file to ${targetPath}`);
   return {
     key,
-    url: `/uploads/${key.replace(/\\/g, '/')}`,
+    url: `storage:${key}`,
     storage: 'local',
     size: buffer.length,
   };
@@ -131,14 +150,15 @@ export async function uploadLocalFileToStorage(
  * Generates a presigned URL to securely download an R2 object.
  */
 export async function getPresignedR2Url(key: string, expiresInSeconds = 3600): Promise<string> {
+  const safeKey = normalizeStorageKey(key);
   if (!isR2Configured()) {
-    return `/uploads/${key.replace(/\\/g, '/')}`;
+    return `storage:${safeKey}`;
   }
 
   const client = getR2Client();
   const command = new GetObjectCommand({
     Bucket: R2_BUCKET_NAME,
-    Key: key,
+    Key: safeKey,
   });
 
   return getSignedUrl(client, command, { expiresIn: expiresInSeconds });
@@ -148,36 +168,40 @@ export async function getPresignedR2Url(key: string, expiresInSeconds = 3600): P
  * Downloads an R2 object into a Buffer.
  */
 export async function downloadR2Buffer(key: string): Promise<Buffer> {
+  const safeKey = normalizeStorageKey(key);
+  const localPath = getLocalStoragePath(safeKey);
   if (!isR2Configured()) {
-    const localPath = path.resolve(process.cwd(), 'public', 'uploads', key);
-    if (!fs.existsSync(localPath)) {
-      throw new Error(`Local file not found: ${localPath}`);
-    }
+    if (!fs.existsSync(localPath)) throw new Error(`Local file not found: ${localPath}`);
     return fs.readFileSync(localPath);
   }
 
-  const client = getR2Client();
-  const response = await client.send(
-    new GetObjectCommand({
-      Bucket: R2_BUCKET_NAME,
-      Key: key,
-    })
-  );
-
-  const stream = response.Body as AsyncIterable<Uint8Array>;
-  const chunks: Buffer[] = [];
-  for await (const chunk of stream) {
-    chunks.push(Buffer.from(chunk));
+  try {
+    const client = getR2Client();
+    const response = await client.send(
+      new GetObjectCommand({
+        Bucket: R2_BUCKET_NAME,
+        Key: safeKey,
+      })
+    );
+    const stream = response.Body as AsyncIterable<Uint8Array>;
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+    return Buffer.concat(chunks);
+  } catch (error) {
+    // Files written during an R2 outage live on local disk. Keep them readable
+    // after R2 recovers instead of treating one backend as the only source.
+    if (fs.existsSync(localPath)) return fs.readFileSync(localPath);
+    throw error;
   }
-  return Buffer.concat(chunks);
 }
 
 /**
  * Deletes an object from Cloudflare R2.
  */
 export async function deleteR2Object(key: string): Promise<boolean> {
+  const safeKey = normalizeStorageKey(key);
+  const localPath = getLocalStoragePath(safeKey);
   if (!isR2Configured()) {
-    const localPath = path.resolve(process.cwd(), 'public', 'uploads', key);
     if (fs.existsSync(localPath)) {
       fs.unlinkSync(localPath);
       return true;
@@ -185,16 +209,22 @@ export async function deleteR2Object(key: string): Promise<boolean> {
     return false;
   }
 
+  let deleted = false;
   try {
     const client = getR2Client();
     await client.send(
       new DeleteObjectCommand({
         Bucket: R2_BUCKET_NAME,
-        Key: key,
+        Key: safeKey,
       })
     );
-    return true;
+    deleted = true;
   } catch {
-    return false;
+    // A local fallback copy may still exist even if the R2 delete failed.
   }
+  if (fs.existsSync(localPath)) {
+    fs.unlinkSync(localPath);
+    deleted = true;
+  }
+  return deleted;
 }

@@ -1,5 +1,5 @@
-import { getAuthenticatedUser } from '@/lib/currentAuth';
-import { getApplicationById } from '@/lib/db';
+import { requireApplicationAccess } from '@/lib/currentAuth';
+import { apiErrorResponse } from '@/lib/api-error';
 import { subscribeProgress, ProgressPayload, ProgressLogItem } from '@/lib/progressEmitter';
 
 export const runtime = 'nodejs';
@@ -10,29 +10,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const profile = await getAuthenticatedUser();
-    if (!profile) {
-      return new Response(JSON.stringify({ error: 'UNAUTHORIZED' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
     const { id } = await params;
-    const application = getApplicationById(id);
-    if (!application) {
-      return new Response(JSON.stringify({ error: 'NOT_FOUND' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    if (application.user_id !== profile.id && profile.role !== 'admin') {
-      return new Response(JSON.stringify({ error: 'FORBIDDEN' }), {
-        status: 403,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
+    const { application } = await requireApplicationAccess(id, 'applications.read');
 
     let existingLogs: ProgressLogItem[] = [];
     if (application.live_logs) {
@@ -121,10 +100,6 @@ export async function GET(
       },
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Stream error';
-    return new Response(JSON.stringify({ error: message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return apiErrorResponse(error, 'Stream error');
   }
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getAuthenticatedUser } from '@/lib/currentAuth';
+import { requirePermission } from '@/lib/currentAuth';
+import { apiErrorResponse } from '@/lib/api-error';
 import { extractPassportDetails } from '@/lib/passport-extractor';
 
 export const runtime = 'nodejs';
@@ -7,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
-    const user = await getAuthenticatedUser().catch(() => null);
+    await requirePermission('passport.extract');
 
     const formData = await req.formData();
     const file = formData.get('passport') as File | null;
@@ -52,14 +53,6 @@ export async function POST(req: Request) {
       confidence: result.confidence,
     });
   } catch (err: unknown) {
-    console.error('Passport extraction error:', err);
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'PROCESSING_FAILED',
-        message: err instanceof Error ? err.message : 'Failed to process passport document',
-      },
-      { status: 500 }
-    );
+    return apiErrorResponse(err, 'Failed to process passport document');
   }
 }

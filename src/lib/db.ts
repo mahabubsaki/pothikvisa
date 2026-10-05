@@ -2,8 +2,18 @@ import { DatabaseSync } from 'node:sqlite';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import fs from 'node:fs';
+import { ACCESS_POLICY, AccessTier, AccountStatus } from './access-policy';
 
-const DB_PATH = path.join(process.cwd(), 'data', 'pothikvisa.db');
+function getDhakaDateKey(date = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dhaka', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+const configuredDbPath = process.env.POTHIKVISA_DB_PATH?.trim();
+const DB_PATH = configuredDbPath
+  ? path.resolve(configuredDbPath)
+  : path.join(process.cwd(), 'data', 'pothikvisa.db');
 
 // Ensure data folder exists
 const dataDir = path.dirname(DB_PATH);
@@ -31,6 +41,10 @@ function initSchema(db: DatabaseSync) {
       password_hash TEXT DEFAULT '',
       salt TEXT DEFAULT '',
       role TEXT NOT NULL DEFAULT 'user',
+      account_status TEXT NOT NULL DEFAULT 'pending',
+      approved_at TEXT,
+      approved_by TEXT,
+      updated_at TEXT,
       created_at TEXT NOT NULL
     );
   `);
@@ -46,18 +60,20 @@ function initSchema(db: DatabaseSync) {
     );
   `);
 
-  // 3. Subscriptions table
+  // Current authorization state. Historical payment records remain in transactions.
   db.exec(`
-    CREATE TABLE IF NOT EXISTS subscriptions (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL,
-      plan TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'active',
-      quota_total INTEGER NOT NULL,
+    CREATE TABLE IF NOT EXISTS memberships (
+      user_id TEXT PRIMARY KEY,
+      tier TEXT NOT NULL CHECK (tier IN ('free', 'paid')),
+      status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'revoked')),
+      quota_limit INTEGER,
       quota_used INTEGER NOT NULL DEFAULT 0,
+      free_quota_used INTEGER NOT NULL DEFAULT 0,
+      free_quota_date TEXT,
       starts_at TEXT NOT NULL,
-      expires_at TEXT NOT NULL,
-      created_at TEXT NOT NULL,
+      expires_at TEXT,
+      updated_at TEXT NOT NULL,
+      updated_by TEXT,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
   `);
@@ -116,6 +132,8 @@ function initSchema(db: DatabaseSync) {
   try { db.exec(`ALTER TABLE applications ADD COLUMN queued_at TEXT;`); } catch {}
   try { db.exec(`ALTER TABLE applications ADD COLUMN started_at TEXT;`); } catch {}
   try { db.exec(`ALTER TABLE applications ADD COLUMN completed_at TEXT;`); } catch {}
+  try { db.exec(`ALTER TABLE applications ADD COLUMN processing_owner TEXT;`); } catch {}
+  try { db.exec(`ALTER TABLE applications ADD COLUMN heartbeat_at TEXT;`); } catch {}
   try { db.exec(`CREATE INDEX IF NOT EXISTS idx_apps_queue ON applications(status, priority_rank, queued_at);`); } catch {}
   try { db.exec(`ALTER TABLE users ADD COLUMN canonical_email TEXT;`); } catch {}
   try { db.exec(`CREATE INDEX IF NOT EXISTS idx_users_canonical_email ON users(canonical_email);`); } catch {}
@@ -134,84 +152,110 @@ function initSchema(db: DatabaseSync) {
     );
   `);
 
-  // 7. Free Trial Abuse Tracking Table (Device fingerprint + IP + multiple Gmail tracking)
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS free_trial_fingerprints (
-      id TEXT PRIMARY KEY,
-      fingerprint_hash TEXT NOT NULL,
-      user_id TEXT NOT NULL,
-      email TEXT NOT NULL,
-      ip_address TEXT,
-      files_created INTEGER DEFAULT 0,
-      created_at TEXT NOT NULL,
-      last_used_at TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_trial_fp ON free_trial_fingerprints(fingerprint_hash);
-    CREATE INDEX IF NOT EXISTS idx_trial_ip ON free_trial_fingerprints(ip_address);
-  `);
-
-  // Ensure demo_profile_seeded column exists in users
-  try {
-    db.exec(`ALTER TABLE users ADD COLUMN demo_profile_seeded INTEGER DEFAULT 0;`);
-  } catch {}
-
-  // Seed default admin and demo user if not present
-  seedDefaults(db);
+  migrateAccessModel(db);
 }
 
-export function hashPassword(password: string): { hash: string; salt: string } {
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
-  return { hash, salt };
+function hasColumn(db: DatabaseSync, table: string, column: string): boolean {
+  const rows = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  return rows.some((row) => row.name === column);
 }
 
-export function verifyPassword(password: string, hash: string, salt: string): boolean {
-  const verifyHash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
-  return hash === verifyHash;
+function migrateAccessModel(db: DatabaseSync): void {
+  const hadAccountStatus = hasColumn(db, 'users', 'account_status');
+
+  if (!hadAccountStatus) {
+    db.exec(`ALTER TABLE users ADD COLUMN account_status TEXT NOT NULL DEFAULT 'pending';`);
+    // Existing accounts predate approval workflow and must not be locked out.
+    db.exec(`UPDATE users SET account_status = 'approved';`);
+  }
+  if (!hasColumn(db, 'users', 'approved_at')) {
+    db.exec(`ALTER TABLE users ADD COLUMN approved_at TEXT;`);
+  }
+  if (!hasColumn(db, 'users', 'approved_by')) {
+    db.exec(`ALTER TABLE users ADD COLUMN approved_by TEXT;`);
+  }
+  if (!hasColumn(db, 'users', 'updated_at')) {
+    db.exec(`ALTER TABLE users ADD COLUMN updated_at TEXT;`);
+  }
+  if (!hasColumn(db, 'memberships', 'free_quota_used')) {
+    db.exec(`ALTER TABLE memberships ADD COLUMN free_quota_used INTEGER NOT NULL DEFAULT 0;`);
+    db.exec(`UPDATE memberships SET free_quota_used = quota_used WHERE tier = 'free';`);
+  }
+  if (!hasColumn(db, 'memberships', 'free_quota_date')) {
+    db.exec(`ALTER TABLE memberships ADD COLUMN free_quota_date TEXT;`);
+  }
+
+  const now = new Date().toISOString();
+  db.prepare(`UPDATE users SET updated_at = COALESCE(updated_at, created_at, ?)`).run(now);
+  db.prepare(`UPDATE users SET approved_at = COALESCE(approved_at, created_at, ?) WHERE account_status = 'approved'`).run(now);
+
+  ensureCurrentMemberships(db, now);
+  db.exec('DROP TABLE IF EXISTS subscriptions;');
+  db.exec('DROP TABLE IF EXISTS schema_migrations;');
+  db.exec('DROP TABLE IF EXISTS free_trial_fingerprints;');
+
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_memberships_tier_status ON memberships(tier, status);`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_transactions_user_status ON transactions(user_id, status);`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_applications_user_created ON applications(user_id, created_at DESC);`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_profiles_user_updated ON applicant_profiles(user_id, updated_at DESC);`);
+  db.exec(`PRAGMA journal_mode = WAL;`);
+  db.exec(`PRAGMA busy_timeout = 5000;`);
+}
+
+function ensureCurrentMemberships(db: DatabaseSync, now: string): void {
+  const users = db.prepare(`
+    SELECT id, role FROM users
+    WHERE account_status = 'approved'
+  `).all() as Array<{ id: string; role: string }>;
+  for (const user of users) {
+    const tier: AccessTier = user.role === 'admin' ? 'paid' : 'free';
+    db.prepare(`
+      INSERT OR IGNORE INTO memberships (
+        user_id, tier, status, quota_limit, quota_used, free_quota_used,
+        starts_at, expires_at, updated_at, updated_by
+      ) VALUES (?, ?, 'active', ?, 0, 0, ?, NULL, ?, 'bootstrap')
+    `).run(user.id, tier, ACCESS_POLICY[tier].quotaLimit, now, now);
+  }
 }
 
 export function seedAdminUser(db?: DatabaseSync) {
   const database = db || getDb();
-  const email = 'saki.admin@pothikvisa.com';
-  const name = 'Saki Admin';
-  const password = 'Iloveumonia1';
-  const { hash, salt } = hashPassword(password);
+  const adminId = process.env.ADMIN_CLERK_USER_ID?.trim();
+  const email = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+  const name = process.env.ADMIN_NAME?.trim() || 'Administrator';
+  if (!adminId || !email) {
+    throw new Error('ADMIN_CLERK_USER_ID and ADMIN_EMAIL are required to seed an administrator.');
+  }
+
   const now = new Date().toISOString();
+  database.prepare(`
+    INSERT INTO users (
+      id, name, email, canonical_email, password_hash, salt, role,
+      account_status, approved_at, approved_by, updated_at, created_at
+    ) VALUES (?, ?, ?, ?, '', '', 'admin', 'approved', ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name,
+      email = excluded.email,
+      canonical_email = excluded.canonical_email,
+      role = 'admin',
+      account_status = 'approved',
+      approved_at = COALESCE(users.approved_at, excluded.approved_at),
+      approved_by = excluded.approved_by,
+      updated_at = excluded.updated_at
+  `).run(adminId, name, email, toCanonicalGmail(email), now, adminId, now, now);
 
-  const existing = database.prepare('SELECT id FROM users WHERE email = ?').get(email) as { id: string } | undefined;
-  const adminId: string = existing?.id || 'usr_saki_admin';
-
-  if (existing) {
-    database.prepare(`
-      UPDATE users 
-      SET name = ?, password_hash = ?, salt = ?, role = 'admin'
-      WHERE id = ?
-    `).run(name, hash, salt, adminId);
-  } else {
-    database.prepare(`
-      INSERT INTO users (id, name, email, password_hash, salt, role, created_at)
-      VALUES (?, ?, ?, ?, ?, 'admin', ?)
-    `).run(adminId, name, email, hash, salt, now);
-  }
-
-  // Ensure admin has an active unlimited agency subscription
-  const sub = database.prepare("SELECT id FROM subscriptions WHERE user_id = ? AND status = 'active'").get(adminId);
-  if (!sub) {
-    database.prepare(`
-      INSERT INTO subscriptions (id, user_id, plan, status, quota_total, quota_used, starts_at, expires_at, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      `sub_${crypto.randomBytes(8).toString('hex')}`,
-      adminId,
-      'agency',
-      'active',
-      999999,
-      0,
-      now,
-      new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-      now
-    );
-  }
+  database.prepare(`
+    INSERT INTO memberships (
+      user_id, tier, status, quota_limit, quota_used, starts_at, expires_at, updated_at, updated_by
+    ) VALUES (?, 'paid', 'active', NULL, 0, ?, NULL, ?, ?)
+    ON CONFLICT(user_id) DO UPDATE SET
+      tier = 'paid',
+      status = 'active',
+      quota_limit = NULL,
+      expires_at = NULL,
+      updated_at = excluded.updated_at,
+      updated_by = excluded.updated_by
+  `).run(adminId, now, now, adminId);
 }
 
 export function clearAllDatabaseData(db?: DatabaseSync) {
@@ -221,8 +265,7 @@ export function clearAllDatabaseData(db?: DatabaseSync) {
     DELETE FROM transactions;
     DELETE FROM applications;
     DELETE FROM applicant_profiles;
-    DELETE FROM free_trial_fingerprints;
-    DELETE FROM subscriptions;
+    DELETE FROM memberships;
     DELETE FROM users;
   `);
 }
@@ -231,10 +274,6 @@ export function resetAndSeedDatabase(db?: DatabaseSync) {
   const database = db || getDb();
   clearAllDatabaseData(database);
   seedAdminUser(database);
-}
-
-function seedDefaults(db: DatabaseSync) {
-  seedAdminUser(db);
 }
 
 // -------------------------------------------------------------
@@ -247,6 +286,10 @@ export interface User {
   email: string;
   canonical_email?: string;
   role: 'user' | 'admin';
+  account_status: AccountStatus;
+  approved_at?: string | null;
+  approved_by?: string | null;
+  updated_at?: string | null;
   created_at: string;
 }
 
@@ -268,12 +311,12 @@ export function toCanonicalGmail(email: string): string {
 export interface Subscription {
   id: string;
   user_id: string;
-  plan: 'free' | 'starter' | 'standard' | 'agency';
-  status: 'active' | 'expired' | 'canceled';
-  quota_total: number;
+  plan: AccessTier;
+  status: 'active' | 'expired' | 'revoked';
+  quota_total: number | null;
   quota_used: number;
   starts_at: string;
-  expires_at: string;
+  expires_at: string | null;
   created_at: string;
 }
 
@@ -282,7 +325,7 @@ export interface MfsTransaction {
   user_id: string;
   user_name?: string;
   user_email?: string;
-  plan: 'starter' | 'standard' | 'agency';
+  plan: 'paid';
   amount: number;
   mfs_method: 'bkash' | 'nagad' | 'rocket';
   sender_phone: string;
@@ -296,89 +339,213 @@ export interface MfsTransaction {
 
 export function getUserByEmail(email: string): User | null {
   const db = getDb();
-  const row = db.prepare('SELECT id, name, email, role, created_at FROM users WHERE email = ?').get(email.toLowerCase().trim());
+  const row = db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase().trim());
   return (row as unknown as User) || null;
 }
 
 export function getUserById(id: string): User | null {
   const db = getDb();
-  const row = db.prepare('SELECT id, name, email, role, created_at FROM users WHERE id = ?').get(id);
+  const row = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
   return (row as unknown as User) || null;
 }
 
 export function getUserSubscription(userId: string): Subscription | null {
   const db = getDb();
-  const row = db.prepare(`
-    SELECT * FROM subscriptions 
-    WHERE user_id = ? AND status = 'active'
-    ORDER BY created_at DESC 
-    LIMIT 1
-  `).get(userId);
+  const row = db.prepare(`SELECT * FROM memberships WHERE user_id = ?`).get(userId) as {
+    user_id: string;
+    tier: AccessTier;
+    status: 'active' | 'revoked';
+    quota_limit: number | null;
+    quota_used: number;
+    free_quota_used: number;
+    free_quota_date: string | null;
+    starts_at: string;
+    expires_at: string | null;
+    updated_at: string;
+  } | undefined;
 
-  if (row) {
-    const sub = row as unknown as Subscription;
-    // Check if subscription has expired by date
-    if (new Date(sub.expires_at).getTime() < Date.now()) {
-      db.prepare("UPDATE subscriptions SET status = 'expired' WHERE id = ?").run(sub.id);
-      return null;
-    }
-    return sub;
+  if (!row || row.status !== 'active') return null;
+
+  if (row.tier === 'paid' && row.expires_at && new Date(row.expires_at).getTime() < Date.now()) {
+    const free = ACCESS_POLICY.free;
+    return {
+      id: row.user_id,
+      user_id: row.user_id,
+      plan: 'free',
+      status: 'active',
+      quota_total: free.quotaLimit,
+      quota_used: row.free_quota_date === getDhakaDateKey() ? row.free_quota_used : 0,
+      starts_at: row.expires_at,
+      expires_at: null,
+      created_at: row.updated_at,
+    };
   }
 
-  // If user has no active subscription, check if they have ever had one
-  const anySub = db.prepare('SELECT id FROM subscriptions WHERE user_id = ?').get(userId);
-  if (!anySub) {
-    // If the user exists in users table, automatically grant them 3 Free Web Files on signup!
-    const user = db.prepare('SELECT id FROM users WHERE id = ?').get(userId);
-    if (user) {
-      return createOrRenewSubscription(userId, 'free');
-    }
-  }
+  return {
+    id: row.user_id,
+    user_id: row.user_id,
+    plan: row.tier,
+    status: row.status,
+    quota_total: row.quota_limit,
+    quota_used: row.tier === 'free' ? (row.free_quota_date === getDhakaDateKey() ? row.free_quota_used : 0) : row.quota_used,
+    starts_at: row.starts_at,
+    expires_at: row.expires_at,
+    created_at: row.updated_at,
+  };
+}
 
-  return null;
+export interface AdminUserAccessRecord {
+  id: string;
+  name: string;
+  email: string;
+  role: 'user' | 'admin';
+  account_status: AccountStatus;
+  approved_at: string | null;
+  approved_by: string | null;
+  created_at: string;
+  tier: AccessTier | null;
+  membership_status: 'active' | 'revoked' | null;
+  quota_limit: number | null;
+  quota_used: number | null;
+  expires_at: string | null;
+}
+
+export function getUsersForAdmin(): AdminUserAccessRecord[] {
+  const db = getDb();
+  const now = new Date().toISOString();
+  const today = getDhakaDateKey();
+  const rows = db.prepare(`
+    SELECT
+      u.id,
+      u.name,
+      u.email,
+      u.role,
+      u.account_status,
+      u.approved_at,
+      u.approved_by,
+      u.created_at,
+      CASE WHEN m.tier = 'paid' AND m.expires_at IS NOT NULL AND m.expires_at < ? THEN 'free' ELSE m.tier END AS tier,
+      m.status AS membership_status,
+      CASE WHEN m.tier = 'paid' AND m.expires_at IS NOT NULL AND m.expires_at < ? THEN ? ELSE m.quota_limit END AS quota_limit,
+      CASE WHEN ((m.tier = 'paid' AND m.expires_at IS NOT NULL AND m.expires_at < ?) OR m.tier = 'free')
+        THEN CASE WHEN m.free_quota_date = ? THEN m.free_quota_used ELSE 0 END
+        ELSE m.quota_used END AS quota_used,
+      m.expires_at
+    FROM users u
+    LEFT JOIN memberships m ON m.user_id = u.id
+    ORDER BY
+      CASE u.account_status WHEN 'pending' THEN 0 WHEN 'suspended' THEN 1 ELSE 2 END,
+      u.created_at DESC
+  `).all(now, now, ACCESS_POLICY.free.quotaLimit, now, today);
+  return rows as unknown as AdminUserAccessRecord[];
 }
 
 export function createOrRenewSubscription(
   userId: string,
-  plan: 'free' | 'starter' | 'standard' | 'agency'
+  plan: AccessTier,
+  updatedBy = 'system'
+): Subscription {
+  return setUserTier(userId, plan, updatedBy);
+}
+
+export function setUserTier(
+  userId: string,
+  tier: AccessTier,
+  updatedBy: string,
+  expiresAtOverride?: string | null
 ): Subscription {
   const db = getDb();
   const now = new Date();
-  const durationDays = plan === 'free' ? 1 : 30; // Free trial is 1 day (24 hours), paid plans are 30 days
-  const expiresAt = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000).toISOString();
+  const policy = ACCESS_POLICY[tier];
+  const current = db.prepare(`
+    SELECT tier, status, expires_at, free_quota_used, free_quota_date FROM memberships WHERE user_id = ?
+  `).get(userId) as { tier: AccessTier; status: string; expires_at: string | null; free_quota_used: number; free_quota_date: string | null } | undefined;
+  const freeQuotaUsed = current?.free_quota_date === getDhakaDateKey() ? current.free_quota_used : 0;
+  const paidRenewalBase = tier === 'paid'
+    && current?.tier === 'paid'
+    && current.status === 'active'
+    && current.expires_at
+    && new Date(current.expires_at).getTime() > now.getTime()
+      ? new Date(current.expires_at)
+      : now;
+  const expiresAt = expiresAtOverride !== undefined
+    ? expiresAtOverride
+    : policy.durationDays === null
+      ? null
+      : new Date(paidRenewalBase.getTime() + policy.durationDays * 24 * 60 * 60 * 1000).toISOString();
 
-  // Free trial gives 3 Web Files to verify speed and accuracy
-  let quota = 3;
-  if (plan === 'starter') quota = 75;
-  if (plan === 'standard') quota = 200;
-  if (plan === 'agency') quota = 999999;
-
-  // Deactivate any existing active subscription
-  db.prepare(`UPDATE subscriptions SET status = 'expired' WHERE user_id = ? AND status = 'active'`).run(userId);
-
-  const subId = `sub_${crypto.randomBytes(8).toString('hex')}`;
   db.prepare(`
-    INSERT INTO subscriptions (id, user_id, plan, status, quota_total, quota_used, starts_at, expires_at, created_at)
-    VALUES (?, ?, ?, 'active', ?, 0, ?, ?, ?)
-  `).run(subId, userId, plan, quota, now.toISOString(), expiresAt, now.toISOString());
+    INSERT INTO memberships (
+      user_id, tier, status, quota_limit, quota_used, free_quota_used, free_quota_date,
+      starts_at, expires_at, updated_at, updated_by
+    ) VALUES (?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(user_id) DO UPDATE SET
+      tier = excluded.tier,
+      status = 'active',
+      quota_limit = excluded.quota_limit,
+      quota_used = excluded.quota_used,
+      free_quota_used = memberships.free_quota_used,
+      free_quota_date = memberships.free_quota_date,
+      starts_at = excluded.starts_at,
+      expires_at = excluded.expires_at,
+      updated_at = excluded.updated_at,
+      updated_by = excluded.updated_by
+  `).run(userId, tier, policy.quotaLimit, tier === 'free' ? freeQuotaUsed : 0, current?.free_quota_used || 0, current?.free_quota_date ?? null, now.toISOString(), expiresAt, now.toISOString(), updatedBy);
 
   return {
-    id: subId,
+    id: userId,
     user_id: userId,
-    plan,
+    plan: tier,
     status: 'active',
-    quota_total: quota,
-    quota_used: 0,
+    quota_total: policy.quotaLimit,
+    quota_used: tier === 'free' ? freeQuotaUsed : 0,
     starts_at: now.toISOString(),
     expires_at: expiresAt,
     created_at: now.toISOString(),
   };
 }
 
+export function approveAccount(userId: string, adminId: string): Subscription {
+  const db = getDb();
+  const now = new Date().toISOString();
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    const result = db.prepare(`
+      UPDATE users
+      SET account_status = 'approved', approved_at = ?, approved_by = ?, updated_at = ?
+      WHERE id = ?
+    `).run(now, adminId, now, userId);
+    if (result.changes === 0) throw new Error('USER_NOT_FOUND');
+    const membership = getUserSubscription(userId) || setUserTier(userId, 'free', adminId);
+    db.exec('COMMIT');
+    return membership;
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+}
+
+export function suspendAccount(userId: string, adminId: string): void {
+  const db = getDb();
+  const now = new Date().toISOString();
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    const result = db.prepare(`
+      UPDATE users SET account_status = 'suspended', updated_at = ? WHERE id = ?
+    `).run(now, userId);
+    if (result.changes === 0) throw new Error('USER_NOT_FOUND');
+    db.prepare(`
+      UPDATE memberships SET status = 'revoked', updated_at = ?, updated_by = ? WHERE user_id = ?
+    `).run(now, adminId, userId);
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+}
+
 export function createTransaction(params: {
   userId: string;
-  plan: 'starter' | 'standard' | 'agency';
-  amount: number;
   mfsMethod: 'bkash' | 'nagad' | 'rocket';
   senderPhone: string;
   trxId: string;
@@ -388,17 +555,19 @@ export function createTransaction(params: {
   const id = `trx_${crypto.randomBytes(8).toString('hex')}`;
   const now = new Date().toISOString();
   const cleanTrx = params.trxId.trim().toUpperCase();
+  const plan = 'paid' as const;
+  const amount = ACCESS_POLICY.paid.priceBdt;
 
   db.prepare(`
     INSERT INTO transactions (id, user_id, plan, amount, mfs_method, sender_phone, trx_id, status, note, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
-  `).run(id, params.userId, params.plan, params.amount, params.mfsMethod, params.senderPhone.trim(), cleanTrx, params.note || '', now);
+  `).run(id, params.userId, plan, amount, params.mfsMethod, params.senderPhone.trim(), cleanTrx, params.note || '', now);
 
   return {
     id,
     user_id: params.userId,
-    plan: params.plan,
-    amount: params.amount,
+    plan,
+    amount,
     mfs_method: params.mfsMethod,
     sender_phone: params.senderPhone.trim(),
     trx_id: cleanTrx,
@@ -442,29 +611,37 @@ export function getUserTransactions(userId: string): MfsTransaction[] {
 export function approveTransaction(trxIdOrId: string, adminEmail: string): boolean {
   const db = getDb();
   const now = new Date().toISOString();
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    const trx = db.prepare(`
+      SELECT * FROM transactions WHERE (id = ? OR trx_id = ?) AND status = 'pending'
+    `).get(trxIdOrId, trxIdOrId) as unknown as MfsTransaction | undefined;
+    if (!trx) {
+      db.exec('ROLLBACK');
+      return false;
+    }
 
-  // Find transaction
-  const trx = db.prepare('SELECT * FROM transactions WHERE id = ? OR trx_id = ?').get(trxIdOrId, trxIdOrId) as unknown as MfsTransaction | undefined;
-  if (!trx || trx.status === 'approved') return false;
-
-  // Mark approved
-  db.prepare(`
-    UPDATE transactions 
-    SET status = 'approved', reviewed_at = ?, reviewed_by = ?
-    WHERE id = ?
-  `).run(now, adminEmail, trx.id);
-
-  // Activate / renew user subscription with the plan quota!
-  createOrRenewSubscription(trx.user_id, trx.plan);
-
-  return true;
+    db.prepare(`
+      UPDATE transactions
+      SET status = 'approved', reviewed_at = ?, reviewed_by = ?
+      WHERE id = ? AND status = 'pending'
+    `).run(now, adminEmail, trx.id);
+    setUserTier(trx.user_id, 'paid', adminEmail);
+    db.exec('COMMIT');
+    return true;
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
 }
 
 export function rejectTransaction(trxIdOrId: string, reason: string, adminEmail: string): boolean {
   const db = getDb();
   const now = new Date().toISOString();
 
-  const trx = db.prepare('SELECT * FROM transactions WHERE id = ? OR trx_id = ?').get(trxIdOrId, trxIdOrId) as unknown as MfsTransaction | undefined;
+  const trx = db.prepare(`
+    SELECT * FROM transactions WHERE (id = ? OR trx_id = ?) AND status = 'pending'
+  `).get(trxIdOrId, trxIdOrId) as unknown as MfsTransaction | undefined;
   if (!trx) return false;
 
   db.prepare(`
@@ -499,53 +676,134 @@ export interface ApplicationRecord {
   queued_at?: string | null;
   started_at?: string | null;
   completed_at?: string | null;
+  processing_owner?: string | null;
+  heartbeat_at?: string | null;
   created_at: string;
   updated_at: string;
 }
 
 export function deductUserQuota(userId: string): boolean {
   const db = getDb();
-  const sub = getUserSubscription(userId);
+  let sub = getUserSubscription(userId);
   if (!sub) return false;
-  if (sub.plan === 'agency') return true; // unlimited
-  if (sub.quota_used >= sub.quota_total) return false;
+  const raw = db.prepare('SELECT tier, expires_at FROM memberships WHERE user_id = ?').get(userId) as {
+    tier: AccessTier;
+    expires_at: string | null;
+  } | undefined;
+  if (sub.plan === 'free' && raw?.tier === 'paid') {
+    sub = setUserTier(userId, 'free', 'system:paid-expired');
+  }
 
-  db.prepare(`
-    UPDATE subscriptions
-    SET quota_used = quota_used + 1
-    WHERE id = ?
-  `).run(sub.id);
+  const today = getDhakaDateKey();
+  const result = db.prepare(`
+    UPDATE memberships
+    SET free_quota_used = CASE WHEN tier = 'free' AND free_quota_date = ? THEN free_quota_used + 1 WHEN tier = 'free' THEN 1 ELSE free_quota_used END,
+    quota_used = CASE WHEN tier = 'free' AND free_quota_date = ? THEN free_quota_used + 1 WHEN tier = 'free' THEN 1 ELSE quota_used END,
+    free_quota_date = CASE WHEN tier = 'free' THEN ? ELSE free_quota_date END,
+    updated_at = ?
+    WHERE user_id = ?
+      AND status = 'active'
+      AND (tier = 'paid' OR free_quota_date IS NULL OR free_quota_date <> ? OR free_quota_used < quota_limit)
+  `).run(today, today, today, new Date().toISOString(), userId, today);
+  return result.changes === 1;
+}
 
-  return true;
+export function hasRemainingQuota(subscription: Subscription | null): boolean {
+  if (!subscription) return false;
+  return subscription.quota_total === null || subscription.quota_used < subscription.quota_total;
 }
 
 export function getPlanPriorityRank(plan?: string | null): number {
-  switch (plan) {
-    case 'agency':
-      return 1; // Agency Pro: Rank 1 (Top Priority)
-    case 'standard':
-      return 2; // Standard: Rank 2 (Second Priority)
-    case 'starter':
-      return 3; // Starter: Rank 3 (Third Priority)
-    case 'free':
-    default:
-      return 4; // Free user: Rank 4 (Last)
-  }
+  return plan === 'paid' ? 1 : 2;
 }
 
 export function enqueueApplication(appId: string, priorityRank: number): boolean {
   const db = getDb();
   const now = new Date().toISOString();
-  db.prepare(`
+  const result = db.prepare(`
     UPDATE applications
     SET status = 'queued',
         priority_rank = ?,
         queued_at = ?,
+        started_at = NULL,
+        completed_at = NULL,
+        processing_owner = NULL,
+        heartbeat_at = NULL,
+        failed_step = NULL,
+        failure_reason = NULL,
         status_message = 'সারিবদ্ধ রয়েছে (অটোমেশন শুরুর অপেক্ষায়)...',
         updated_at = ?
-    WHERE id = ?
+    WHERE id = ? AND status IN ('draft', 'failed')
   `).run(priorityRank, now, now, appId);
-  return true;
+  return result.changes === 1;
+}
+
+export function claimNextQueuedApplication(workerId: string): ApplicationRecord | null {
+  const db = getDb();
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    const active = db.prepare("SELECT id FROM applications WHERE status = 'processing' LIMIT 1").get();
+    if (active) {
+      db.exec('COMMIT');
+      return null;
+    }
+    const row = db.prepare(`
+      SELECT id FROM applications
+      WHERE status = 'queued'
+      ORDER BY priority_rank ASC, queued_at ASC
+      LIMIT 1
+    `).get() as { id: string } | undefined;
+    if (!row) {
+      db.exec('COMMIT');
+      return null;
+    }
+    const now = new Date().toISOString();
+    const result = db.prepare(`
+      UPDATE applications
+      SET status = 'processing', started_at = ?, heartbeat_at = ?, processing_owner = ?, updated_at = ?
+      WHERE id = ? AND status = 'queued'
+    `).run(now, now, workerId, now, row.id);
+    if (result.changes !== 1) {
+      db.exec('COMMIT');
+      return null;
+    }
+    const claimed = db.prepare('SELECT * FROM applications WHERE id = ?').get(row.id) as ApplicationRecord | undefined;
+    db.exec('COMMIT');
+    return claimed || null;
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+}
+
+export function refreshApplicationHeartbeat(appId: string, workerId: string): boolean {
+  const now = new Date().toISOString();
+  const result = getDb().prepare(`
+    UPDATE applications SET heartbeat_at = ?, updated_at = ?
+    WHERE id = ? AND status = 'processing' AND processing_owner = ?
+  `).run(now, now, appId, workerId);
+  return result.changes === 1;
+}
+
+export function releaseApplicationClaim(appId: string, workerId: string): void {
+  getDb().prepare(`
+    UPDATE applications SET processing_owner = NULL, heartbeat_at = NULL
+    WHERE id = ? AND processing_owner = ?
+  `).run(appId, workerId);
+}
+
+export function recoverStaleProcessingApplications(staleAfterMs = 120_000): number {
+  const now = new Date().toISOString();
+  const staleBefore = new Date(Date.now() - staleAfterMs).toISOString();
+  const result = getDb().prepare(`
+    UPDATE applications
+    SET status = 'failed',
+        failure_reason = 'Automation stopped unexpectedly. Review the application before resuming to avoid duplicate submission.',
+        status_message = 'Automation stopped unexpectedly. Please review before resuming.',
+        completed_at = ?, processing_owner = NULL, heartbeat_at = NULL, updated_at = ?
+    WHERE status = 'processing' AND (heartbeat_at IS NULL OR heartbeat_at < ?)
+  `).run(now, now, staleBefore);
+  return Number(result.changes);
 }
 
 export function getNextQueuedApplication(): ApplicationRecord | null {
@@ -840,11 +1098,8 @@ export function saveOrUpdateProfile(params: {
 }
 
 export function getMaxProfilesForPlan(plan?: string | null, isAdmin = false): number {
-  if (isAdmin) return 999;
-  if (plan === 'agency') return 50;
-  if (plan === 'standard') return 10;
-  if (plan === 'starter') return 5;
-  return 1; // Free trial gets 1 saved profile
+  if (isAdmin) return Number.MAX_SAFE_INTEGER;
+  return ACCESS_POLICY[plan === 'paid' ? 'paid' : 'free'].maxProfiles;
 }
 
 export function getUserSavedProfiles(userId: string): SavedProfileRecord[] {
@@ -864,88 +1119,4 @@ export function deleteSavedProfile(id: string, userId: string): boolean {
   const res = db.prepare('DELETE FROM applicant_profiles WHERE id = ? AND user_id = ?').run(id, userId);
   return res.changes > 0;
 }
-
-export function hasUserSeededDemoProfile(userId: string): boolean {
-  const db = getDb();
-  const row = db.prepare('SELECT demo_profile_seeded FROM users WHERE id = ?').get(userId) as { demo_profile_seeded?: number } | undefined;
-  return Boolean(row?.demo_profile_seeded);
-}
-
-export function markUserDemoProfileSeeded(userId: string): void {
-  const db = getDb();
-  db.prepare('UPDATE users SET demo_profile_seeded = 1 WHERE id = ?').run(userId);
-}
-
-// -------------------------------------------------------------
-// Free Trial Device Fingerprint & Abuse Protection Helpers
-// -------------------------------------------------------------
-
-export interface FreeTrialCheckResult {
-  allowed: boolean;
-  totalDeviceFilesUsed: number;
-  remainingFiles: number;
-  reason?: string;
-}
-
-export function checkAndRecordFreeTrialUsage(params: {
-  fingerprint: string;
-  userId: string;
-  email: string;
-  ipAddress?: string;
-  increment?: boolean;
-}): FreeTrialCheckResult {
-  const db = getDb();
-  const cleanFp = (params.fingerprint || 'unknown_fp').trim();
-  const now = new Date().toISOString();
-
-  // 1. Calculate how many total free files have been created by this physical device fingerprint across ANY user/account!
-  const rows = db.prepare(`
-    SELECT SUM(files_created) as total 
-    FROM free_trial_fingerprints 
-    WHERE fingerprint_hash = ?
-  `).get(cleanFp) as { total: number | null } | undefined;
-
-  const totalDeviceFilesUsed = (rows && rows.total) ? Number(rows.total) : 0;
-  const remainingFiles = Math.max(0, 3 - totalDeviceFilesUsed);
-
-  if (totalDeviceFilesUsed >= 3) {
-    return {
-      allowed: false,
-      totalDeviceFilesUsed,
-      remainingFiles: 0,
-      reason: 'DEVICE_LIMIT_REACHED',
-    };
-  }
-
-  // If increment is requested (when an application is created)
-  if (params.increment) {
-    const existing = db.prepare(`
-      SELECT id, files_created 
-      FROM free_trial_fingerprints 
-      WHERE fingerprint_hash = ? AND user_id = ?
-    `).get(cleanFp, params.userId) as { id: string; files_created: number } | undefined;
-
-    if (existing) {
-      db.prepare(`
-        UPDATE free_trial_fingerprints
-        SET files_created = files_created + 1, last_used_at = ?, ip_address = ?
-        WHERE id = ?
-      `).run(now, params.ipAddress || null, existing.id);
-    } else {
-      const id = `ftp_${crypto.randomBytes(8).toString('hex')}`;
-      db.prepare(`
-        INSERT INTO free_trial_fingerprints (id, fingerprint_hash, user_id, email, ip_address, files_created, created_at, last_used_at)
-        VALUES (?, ?, ?, ?, ?, 1, ?, ?)
-      `).run(id, cleanFp, params.userId, params.email.toLowerCase(), params.ipAddress || null, now, now);
-    }
-  }
-
-  return {
-    allowed: true,
-    totalDeviceFilesUsed: params.increment ? totalDeviceFilesUsed + 1 : totalDeviceFilesUsed,
-    remainingFiles: params.increment ? Math.max(0, remainingFiles - 1) : remainingFiles,
-  };
-}
-
-
 

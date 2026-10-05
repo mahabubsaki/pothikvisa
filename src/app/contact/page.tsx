@@ -23,7 +23,7 @@ export function ContactPage() {
     name: '',
     email: '',
     phone: '',
-    plan: 'standard',
+    plan: 'paid',
     message: '',
   });
 
@@ -138,14 +138,11 @@ export function ContactPage() {
                       <SelectValue placeholder="Select a plan" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="starter">
-                        {isBn ? 'Starter Plan (১৫০ ৳ / ৭৫ ওয়েব ফাইল)' : 'Starter Plan (150 ৳ / 75 files)'}
+                      <SelectItem value="free">
+                        {isBn ? 'ফ্রি (প্রতিদিন ৩টি ওয়েব ফাইল)' : 'Free (3 web files per day)'}
                       </SelectItem>
-                      <SelectItem value="standard">
-                        {isBn ? 'Standard Plan (৩০০ ৳ / ২০০ ওয়েব ফাইল)' : 'Standard Plan (300 ৳ / 200 files)'}
-                      </SelectItem>
-                      <SelectItem value="agency">
-                        {isBn ? 'Agency Pro (৫০০ ৳ / আনলিমিটেড + এআই)' : 'Agency Pro (500 ৳ / Unlimited + AI)'}
+                      <SelectItem value="paid">
+                        {isBn ? 'পেইড (৫০০ ৳ / আনলিমিটেড + এআই)' : 'Paid (500 ৳ / Unlimited + AI)'}
                       </SelectItem>
                       <SelectItem value="custom">
                         {isBn ? 'এজেন্সি কাস্টম ইন্টিগ্রেশন' : 'Agency Custom Integration'}

@@ -25,10 +25,9 @@ function SignInContent() {
           পথিক ভিসায় সাইন ইন করুন
         </h1>
 
-        {/* Gmail Domain Restriction Notice */}
         <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-800 shadow-2xs font-bangla">
           <Mail className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-          <span>শুধুমাত্র @gmail.com ইমেইল অ্যাড্রেস অনুমোদিত</span>
+          <span>নতুন অ্যাকাউন্টে অ্যাডমিন অনুমোদন প্রয়োজন</span>
         </div>
       </div>
 
@@ -77,8 +76,8 @@ function SignInContent() {
       <div className="w-full max-w-md flex justify-center">
         <SignIn
           signUpUrl="/sign-up"
-          fallbackRedirectUrl="/dashboard"
-          signUpFallbackRedirectUrl="/dashboard"
+          fallbackRedirectUrl="/pending-approval"
+          signUpFallbackRedirectUrl="/pending-approval"
         />
       </div>
     </div>

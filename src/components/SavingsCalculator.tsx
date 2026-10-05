@@ -15,20 +15,9 @@ export function SavingsCalculator() {
   // Traditional manual cyber cafe rate: ~500 BDT per application
   const manualCost = appsPerMonth * 500;
 
-  // Automated plan selection
-  let ourCost = 150;
-  let recommendedPlan = isBn ? 'স্টার্টার (১৫০ ৳)' : 'Starter (150 ৳)';
-  let costPerForm = (150 / appsPerMonth).toFixed(1);
-
-  if (appsPerMonth > 200) {
-    ourCost = 500;
-    recommendedPlan = isBn ? 'এজেন্সি প্রো (৫০০ ৳)' : 'Agency Pro (500 ৳)';
-    costPerForm = (500 / appsPerMonth).toFixed(1);
-  } else if (appsPerMonth > 75) {
-    ourCost = 300;
-    recommendedPlan = isBn ? 'স্ট্যান্ডার্ড (৩০০ ৳)' : 'Standard (300 ৳)';
-    costPerForm = (300 / appsPerMonth).toFixed(1);
-  }
+  const ourCost = 500;
+  const recommendedPlan = isBn ? 'পেইড (৫০০ ৳)' : 'Paid (500 ৳)';
+  const costPerForm = (ourCost / appsPerMonth).toFixed(1);
 
   const savings = manualCost - ourCost;
   // Approx 45 mins manual vs 45 sec automated = ~44 mins saved per app
@@ -86,9 +75,9 @@ export function SavingsCalculator() {
 
         <div className="flex justify-between text-[11px] text-[#888888] font-mono">
           <span>{isBn ? '১০টি ফাইল' : '10 files'}</span>
-          <span>{isBn ? '৭৫টি (স্টার্টার)' : '75 files (Starter)'}</span>
-          <span>{isBn ? '২০০টি (স্ট্যান্ডার্ড)' : '200 files (Standard)'}</span>
-          <span>{isBn ? '২৫০+ (এজেন্সি প্রো)' : '250+ files (Agency)'}</span>
+          <span>{isBn ? '৭৫টি' : '75 files'}</span>
+          <span>{isBn ? '২০০টি' : '200 files'}</span>
+          <span>{isBn ? '২৫০+' : '250+ files'}</span>
         </div>
       </div>
 

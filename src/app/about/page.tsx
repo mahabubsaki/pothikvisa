@@ -116,6 +116,21 @@ export default function AboutPage() {
 
       </div>
 
+      <section className="grid gap-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-8 md:grid-cols-2">
+        <div>
+          <h2 className="text-xl font-bold text-black">{isBn ? 'অনুমোদনের পর ফ্রি অ্যাক্সেস' : 'Free access after approval'}</h2>
+          <p className="mt-3 text-sm leading-relaxed text-[#555555]">
+            {isBn ? 'নতুন অ্যাকাউন্ট অ্যাডমিন অনুমোদনের আগে ড্যাশবোর্ড বা সুরক্ষিত ফিচার ব্যবহার করতে পারবে না। অনুমোদনের পর প্রতিদিন সর্বোচ্চ ৩টি ওয়েব ফাইল তৈরি করা যাবে।' : 'New accounts cannot use the dashboard or protected features until an administrator approves them. After approval, Free users can create up to 3 web files each day; the quota resets daily.'}
+          </p>
+        </div>
+        <div>
+          <h2 className="text-xl font-bold text-black">{isBn ? 'Paid অ্যাক্সেস' : 'Paid access'}</h2>
+          <p className="mt-3 text-sm leading-relaxed text-[#555555]">
+            {isBn ? 'Paid প্ল্যান ৫০০ ৳-এ ৩০ দিনের জন্য সীমাহীন ওয়েব ফাইল এবং অতিরিক্ত প্রোফাইল, OCR, AI, PDF প্রিভিউ ও ব্যাচ প্রসেসিং দেয়।' : 'Paid costs 500 ৳ for 30 days and includes unlimited web files, more profiles, OCR, AI extraction, PDF preview, and batch processing.'}
+          </p>
+        </div>
+      </section>
+
       {/* Security & Data Privacy Card */}
       <motion.div
         initial={{ opacity: 0, y: 15 }}

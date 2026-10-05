@@ -10,7 +10,7 @@ import { FaqAccordion } from '@/components/FaqAccordion';
 import { SavingsCalculator } from '@/components/SavingsCalculator';
 import { SupportedCenters } from '@/components/SupportedCenters';
 import { VisaTypeSelector } from '@/components/VisaTypeSelector';
-import { FreeTrialSection } from '@/components/FreeTrialSection';
+import { FreeAccessSection } from '@/components/FreeAccessSection';
 import { PothikVisaLogo } from '@/components/PothikVisaLogo';
 import { ArrowRight, CheckCircle2, FileCheck, Sparkles } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
@@ -91,8 +91,8 @@ export default function HomePage() {
       {/* 1. Hero Section */}
       <HomeHero />
 
-      {/* 1.1 Free Trial Verification Offer */}
-      <FreeTrialSection />
+      {/* Free access offer */}
+      <FreeAccessSection />
 
       {/* 2. Interactive Savings Calculator (Unique anti-AI interactive widget) */}
       <section className="py-8">
@@ -214,8 +214,8 @@ export default function HomePage() {
           </h2>
           <p className="text-base text-[#555555] max-w-xl mx-auto leading-relaxed">
             {isBn
-              ? '১৫০ ৳ (৭৫টি ওয়েব ফাইল) বা ৩০০ ৳ (২০০টি ওয়েব ফাইল) প্ল্যান বেছে নিয়ে নিজের অথবা ক্লায়েন্টের ভিসা ওয়েব ফাইল তৈরি করুন কোনো টাইমআউট বা ভুল ছাড়াই।'
-              : 'Get started with our 150 ৳ Starter plan (75 Web Files) or 300 ৳ Standard plan (200 Web Files). Fast, compliant Indian visa web file creation with zero timeout frustration.'}
+              ? 'অনুমোদনের পর ফ্রি ব্যবহার শুরু করুন, অথবা আনলিমিটেড ফাইল ও সব ফিচারের জন্য পেইড প্ল্যান নিন।'
+              : 'Start free after account approval, then upgrade to Paid for unlimited web files and all advanced tools.'}
           </p>
           <div className="pt-2">
             <Button asChild size="lg" className="rounded-full h-12 px-7">

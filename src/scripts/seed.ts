@@ -1,11 +1,17 @@
-import { resetAndSeedDatabase, getDb } from '../lib/db';
+import 'dotenv/config';
+import { getDb, seedAdminUser } from '../lib/db';
 
-console.log('🔄 Wiping all data from SQLite database and seeding fresh admin...');
-resetAndSeedDatabase();
+console.log('Provisioning the configured administrator; existing application data is preserved.');
+seedAdminUser();
 
 const db = getDb();
-const admin = db.prepare('SELECT id, name, email, role, created_at FROM users WHERE email = ?').get('saki.admin@pothikvisa.com') as { id: string } | undefined;
-const sub = admin ? db.prepare('SELECT * FROM subscriptions WHERE user_id = ?').get(admin.id) : null;
+const adminId = process.env.ADMIN_CLERK_USER_ID?.trim();
+const admin = adminId
+  ? db.prepare('SELECT id, name, email, role, account_status, created_at FROM users WHERE id = ?').get(adminId)
+  : null;
+const membership = adminId
+  ? db.prepare('SELECT tier, status, quota_limit, expires_at FROM memberships WHERE user_id = ?').get(adminId)
+  : null;
 
-console.log('✅ SQLite database cleared & fresh admin seeded successfully:');
-console.log(JSON.stringify({ admin, subscription: sub }, null, 2));
+console.log('Administrator provisioning complete:');
+console.log(JSON.stringify({ admin, membership }, null, 2));

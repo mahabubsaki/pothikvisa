@@ -1,10 +1,10 @@
-import path from 'path';
-import fs from 'fs';
 import { NextResponse } from 'next/server';
-import { getAuthenticatedUser } from '@/lib/currentAuth';
+import { requirePermission } from '@/lib/currentAuth';
+import { apiErrorResponse } from '@/lib/api-error';
 import { getSavedProfileById, saveOrUpdateProfile } from '@/lib/db';
 import { uploadBufferToStorage } from '@/lib/r2';
 import { enhanceConsularPhoto, enhancePassportDocument } from '@/lib/media-enhancer';
+import { validateMediaUpload } from '@/lib/upload-policy';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -14,21 +14,22 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getAuthenticatedUser();
-    if (!user) {
-      return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
-    }
+    const user = await requirePermission('profiles.write');
 
     const { id } = await params;
     const profile = getSavedProfileById(id, user.id);
-    if (!profile && !user.isAdmin) {
+    if (!profile) {
       return NextResponse.json({ error: 'NOT_FOUND', message: 'Profile not found' }, { status: 404 });
     }
 
-    const targetProfile = profile!;
+    const targetProfile = profile;
     const formData = await req.formData();
     const photoFile = formData.get('photo') as File | null;
     const passportPdfFile = formData.get('passportPdf') as File | null;
+    const hasPaidLimits = user.isAdmin || user.tier === 'paid';
+    const uploadError = validateMediaUpload(photoFile, 'photo', hasPaidLimits)
+      || validateMediaUpload(passportPdfFile, 'passport', hasPaidLimits);
+    if (uploadError) return NextResponse.json({ error: uploadError }, { status: 413 });
 
     let existingData: Record<string, unknown> = {};
     try {
@@ -95,8 +96,6 @@ export async function POST(
       passportPdfSizeKb,
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Failed to upload profile assets';
-    console.error('Error in profile upload route:', error);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiErrorResponse(error, 'Failed to upload profile assets');
   }
 }

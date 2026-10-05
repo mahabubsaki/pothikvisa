@@ -45,9 +45,7 @@ export interface IvacChecklistData {
   missionCode: string;
   centerInfo: IvacCenterInfo;
   verificationUrl: string;
-  govtStatusUrl: string;
   qrCodeDataUrl: string;
-  govtQrCodeDataUrl: string;
   generatedDate: string;
   items: ChecklistItem[];
 }
@@ -408,10 +406,8 @@ export async function getIvacChecklistData(
   // Digital verification URL (Option 3): Scanning with phone camera opens digital checklist with 1-click PDF download
   const appBaseUrl = baseUrl || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
   const verificationUrl = `${appBaseUrl.replace(/\/$/, '')}/applications/${application.id}/checklist`;
-  const govtStatusUrl = 'https://indianvisa-bangladesh.nic.in/visa/StatusEnquiry';
 
   const qrCodeDataUrl = await generateQrCode(verificationUrl);
-  const govtQrCodeDataUrl = await generateQrCode(govtStatusUrl);
 
   const visaType = application.visa_type || profile.step1_registration?.visaPurpose || '544';
   let visaTypeLabelEn = 'Tourist Visa (544)';
@@ -482,9 +478,7 @@ export async function getIvacChecklistData(
     missionCode,
     centerInfo,
     verificationUrl,
-    govtStatusUrl,
     qrCodeDataUrl,
-    govtQrCodeDataUrl,
     generatedDate: new Date().toLocaleDateString('en-GB', {
       day: '2-digit',
       month: 'short',

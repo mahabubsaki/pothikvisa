@@ -14,7 +14,7 @@ export function FaqAccordion() {
         {
           question: 'আমি কি টাকা দেওয়ার আগেই সফটওয়্যারটির কাজ পরীক্ষা করতে পারব?',
           answer:
-            'হ্যাঁ, অবশ্যই! সাইন আপ করার সাথে সাথেই আপনার অ্যাকাউন্টে ৩টি ওয়েব ফাইল সম্পূর্ণ ফ্রি ট্রায়াল ব্যালেন্স হিসেবে যোগ হবে। কোনো ক্রেডিট কার্ড বা বিকাশ পেমেন্ট ছাড়াই আপনি অটো-ফিল, ২×২ ছবির মাপ ও অফিসিয়াল ৪-পাতার পিডিএফ স্পিড নিজে তৈরি করে যাচাই করতে পারবেন।',
+            'হ্যাঁ। অ্যাডমিন অনুমোদনের পর ফ্রি অ্যাকাউন্টে ৩টি ওয়েব ফাইল ও ১টি সংরক্ষিত প্রোফাইল পাওয়া যায়। OCR, AI, PDF প্রিভিউ ও ব্যাচ প্রসেসিং পেইড ফিচার।',
         },
         {
           question: 'পোর্টাল থেকে হঠাৎ লগআউট বা সেশন ড্রপ কেন হয় না?',
@@ -37,9 +37,9 @@ export function FaqAccordion() {
             'আইভ্যাক সেন্টারের নিয়ম অনুযায়ী ছবি হতে হয় নিখুঁত ২×২ ইঞ্চি ও সম্পূর্ণ সাদা ব্যাকগ্রাউন্ডের। মোবাইল থেকে যেকোনো সাধারণ পাসপোর্ট সাইজ ছবি আপলোড করলেই আমাদের সিস্টেম স্বয়ংক্রিয়ভাবে তা কনস্যুলার স্ট্যান্ডার্ড অনুযায়ী ক্রপ ও রিসাইজ করে নেয়।',
         },
         {
-          question: '১৫০ ৳, ৩০০ ৳ এবং ৫০০ ৳ প্যাকেজের মধ্যে কোনটা আমার জন্য ভালো?',
+          question: 'ফ্রি এবং পেইড প্ল্যানের মধ্যে পার্থক্য কী?',
           answer:
-            'নিজে বা পরিবারের ভিসার জন্য স্টার্টার (১৫০ ৳ / ৭৫টি ওয়েব ফাইল — মাত্র ২ ৳ / ফাইল) একদম সাশ্রয়ী। নিয়মিত ভ্রমণকারী ও ভিসা কনসালট্যান্টদের জন্য স্ট্যান্ডার্ড প্যাক (৩০০ ৳ / ২০০টি ওয়েব ফাইল — মাত্র ১.৫ ৳ / ফাইল + পাসপোর্ট অটো-ফিল) সবচেয়ে জনপ্রিয়। আর সাইবার ক্যাফে ও এজেন্সিদের জন্য রয়েছে আনলিমিটেড এজেন্সি প্রো (৫০০ ৳ + স্মার্ট এআই ফর্ম ফিলার)।',
+            'অ্যাডমিন অনুমোদনের পর ফ্রি প্ল্যানে ৩টি ওয়েব ফাইল ও ১টি প্রোফাইল পাওয়া যায়। ৫০০ ৳ পেইড প্ল্যানে ৩০ দিনের জন্য আনলিমিটেড ফাইল, ৫০টি প্রোফাইল, পাসপোর্ট OCR, AI ফিলার, PDF প্রিভিউ ও ব্যাচ প্রসেসিং পাওয়া যায়।',
         },
         {
           question: 'পথিক ভিসা কি আইভ্যাকের ভিসা ফি জমা নেয়?',
@@ -51,12 +51,16 @@ export function FaqAccordion() {
           answer:
             'ঢাকা (যমুনা ফিউচার পার্ক), চট্টগ্রাম, রাজশাহী, সিলেট ও খুলনা — দেশের সকল অনুমোদিত আইভ্যাক সেন্টারে জমার জন্য শতভাগ উপযুক্ত ফরম্যাটে পিডিএফ তৈরি হয়।',
         },
+        {
+          question: 'অ্যাডমিন অনুমোদনের পর ফ্রি প্ল্যানে কতগুলো ওয়েব ফাইল তৈরি করা যাবে?',
+          answer: 'অ্যাকাউন্ট অনুমোদনের পর ফ্রি প্ল্যানে প্রতিদিন সর্বোচ্চ ৩টি ওয়েব ফাইল তৈরি করা যাবে। দৈনিক কোটা প্রতিদিন রিসেট হয়। Paid প্ল্যানে ৩০ দিনের জন্য সীমাহীন ওয়েব ফাইল পাওয়া যায়।',
+        },
       ]
     : [
         {
           question: 'Can I test the platform before making any payment?',
           answer:
-            'Yes, absolutely! Every new account instantly receives 3 Free Web Files on signup. No credit card or bKash payment is required. You can test automated form fill-up, 2×2 consular photo cropping, and official 4-page PDF generation completely risk-free.',
+            'Yes. After administrator approval, Free access includes up to 3 Web Files per day and 1 saved profile with no payment card required. The daily limit resets each day. OCR, AI extraction, PDF preview, and batch processing are Paid features.',
         },
         {
           question: 'How does PothikVisa prevent portal session dropouts?',
@@ -71,7 +75,7 @@ export function FaqAccordion() {
         {
           question: 'How does the bKash, Nagad, or Rocket payment verification work?',
           answer:
-            'We support direct manual MFS transactions in Bangladeshi Taka. Choose your subscription plan (150 ৳, 300 ৳, or 500 ৳), send the amount to our official bKash, Nagad, or Rocket number, and enter your sender number along with the Transaction ID (TrxID) in the checkout form. Our team verifies the transaction and activates your monthly quota.',
+            'We support direct manual MFS transactions in Bangladeshi Taka. Send 500 ৳ to the official bKash, Nagad, or Rocket number, then submit your sender number and Transaction ID. Paid access activates only after an administrator verifies the payment.',
         },
         {
           question: 'What are the photo standards required for submission?',
@@ -79,9 +83,9 @@ export function FaqAccordion() {
             'The portal requires a 2×2 inch square photo with a plain white background and specific file size limits. Our platform automatically crops, aligns, and adjusts your photo to meet 100% of embassy formatting rules before submission.',
         },
         {
-          question: 'What is the difference between the 150 ৳, 300 ৳, and 500 ৳ plans?',
+          question: 'What is the difference between Free and Paid access?',
           answer:
-            'The Starter plan (150 ৳) provides 75 Web Files per month (2 ৳ per file) with automated form filling. The Standard plan (300 ৳) provides 200 Web Files per month (1.5 ৳ per file), automated Passport document reading, pixel-perfect official PDF preview, and priority processing. The Agency Pro plan (500 ৳) offers unlimited Web Files, Smart AI Form Filler (WhatsApp/Excel autofill), multi-applicant batching, and dedicated support for travel agencies and cyber cafes.',
+            'After admin approval, Free access includes up to 3 Web Files per day and 1 saved profile; the quota resets daily. Paid access costs 500 ৳ for 30 days and includes unlimited Web Files, 50 profiles, Passport OCR, AI form filling, PDF preview, batch processing, and priority execution.',
         },
         {
           question: 'Does PothikVisa pay the IVAC visa processing fee or schedule the appointment?',

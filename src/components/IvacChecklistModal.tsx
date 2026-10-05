@@ -17,16 +17,12 @@ import {
   Languages,
   CheckSquare,
   Square,
-  ExternalLink,
-  RefreshCw,
-  Globe,
   QrCode,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { IvacChecklistData, ChecklistItem } from '@/lib/ivacChecklist';
 import { PothikVisaLogo } from '@/components/PothikVisaLogo';
-import type { VisaStatusResult } from '@/services/visaStatus';
 
 interface IvacChecklistModalProps {
   applicationId: string | null;
@@ -44,29 +40,6 @@ export function IvacChecklistModal({
   const [error, setError] = useState<string | null>(null);
   const [isBn, setIsBn] = useState(true);
   const [checkedMap, setCheckedMap] = useState<Record<string, boolean>>({});
-  const [activeQr, setActiveQr] = useState<'verification' | 'govt'>('verification');
-  const [statusChecking, setStatusChecking] = useState(false);
-  const [statusResult, setStatusResult] = useState<VisaStatusResult | null>(null);
-  const [statusError, setStatusError] = useState<string | null>(null);
-
-  const handleCheckGovtStatus = async () => {
-    if (!applicationId) return;
-    setStatusChecking(true);
-    setStatusError(null);
-    try {
-      const res = await fetch(`/api/applications/${applicationId}/status`);
-      const resData = await res.json();
-      if (!res.ok || !resData.success) {
-        throw new Error(resData.message || resData.error || 'Failed to check status');
-      }
-      setStatusResult(resData.data);
-    } catch (err: unknown) {
-      setStatusError(err instanceof Error ? err.message : 'Status check failed');
-    } finally {
-      setStatusChecking(false);
-    }
-  };
-
   useEffect(() => {
     if (!isOpen || !applicationId) return;
 
@@ -250,42 +223,15 @@ export function IvacChecklistModal({
                   <div className="text-center p-1.5 bg-white border border-zinc-300 rounded-2xl shadow-xs">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={activeQr === 'verification' ? data.qrCodeDataUrl : (data.govtQrCodeDataUrl || data.qrCodeDataUrl)}
+                      src={data.qrCodeDataUrl}
                       alt="QR Code"
                       className="w-20 h-20 sm:w-24 sm:h-24 object-contain mx-auto"
                     />
                     <span className="block text-[9px] font-mono text-zinc-600 font-bold uppercase mt-1">
-                      {activeQr === 'verification'
-                        ? (isBn ? '📱 মোবাইল ডিজিটাল স্লিপ' : '📱 Mobile Digital Slip')
-                        : (isBn ? '🏛️ সরকারি স্ট্যাটাস লিংক' : '🏛️ Govt Status Link')}
+                      {isBn ? '📱 মোবাইল ডিজিটাল স্লিপ' : '📱 Mobile Digital Slip'}
                     </span>
                   </div>
 
-                  {/* QR Toggle Pills (Hidden on print) */}
-                  <div className="no-print flex items-center bg-zinc-100 p-0.5 rounded-lg border border-zinc-200 text-[10px]">
-                    <button
-                      type="button"
-                      onClick={() => setActiveQr('verification')}
-                      className={`px-2 py-0.5 rounded-md font-semibold transition-all ${
-                        activeQr === 'verification'
-                          ? 'bg-black text-white shadow-xs'
-                          : 'text-zinc-600 hover:text-black'
-                      }`}
-                    >
-                      {isBn ? 'ডিজিটাল স্লিপ' : 'Digital Slip'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActiveQr('govt')}
-                      className={`px-2 py-0.5 rounded-md font-semibold transition-all ${
-                        activeQr === 'govt'
-                          ? 'bg-black text-white shadow-xs'
-                          : 'text-zinc-600 hover:text-black'
-                      }`}
-                    >
-                      {isBn ? 'সরকারি ট্র্যাকিং' : 'Govt Status'}
-                    </button>
-                  </div>
                 </div>
               </div>
 
@@ -346,89 +292,6 @@ export function IvacChecklistModal({
                     </span>
                   </div>
                 </div>
-              </div>
-
-              {/* Official Indian Visa Live Status Enquiry Box */}
-              <div className="bg-zinc-900 text-white rounded-2xl p-4 shadow-sm border border-zinc-800 space-y-3 no-print">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
-                      <Globe className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2 font-bangla">
-                        {isBn ? 'অফিসিয়াল ভারতীয় দূতাবাস লাইভ ভিসা ট্র্যাকিং' : 'Official Indian Embassy Visa Status Tracking'}
-                        <Badge variant="outline" className="text-[9px] border-emerald-500/40 text-emerald-400 bg-emerald-950/40 font-mono">
-                          LIVE NIC
-                        </Badge>
-                      </h3>
-                      <p className="text-[11px] text-zinc-400 font-bangla">
-                        {isBn
-                          ? 'দূতাবাসের StatusEnquiry সার্ভার থেকে সরাসরি বর্তমান অগ্রগতি অনুসন্ধান করুন।'
-                          : 'Direct real-time query to official indianvisa-bangladesh.nic.in portal.'}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 self-stretch sm:self-auto">
-                    <Button
-                      onClick={handleCheckGovtStatus}
-                      disabled={statusChecking}
-                      size="sm"
-                      className="flex-1 sm:flex-none h-8 text-xs font-bold rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black shadow-xs gap-1.5"
-                    >
-                      <RefreshCw className={`w-3.5 h-3.5 ${statusChecking ? 'animate-spin' : ''}`} />
-                      <span>
-                        {statusChecking
-                          ? (isBn ? 'অনুসন্ধান চলছে...' : 'Checking...')
-                          : (isBn ? 'লাইভ স্ট্যাটাস যাচাই' : 'Check Status Now')}
-                      </span>
-                    </Button>
-
-                    <Button
-                      asChild
-                      variant="outline"
-                      size="sm"
-                      className="h-8 text-xs rounded-xl border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700 hover:text-white"
-                    >
-                      <a
-                        href="https://indianvisa-bangladesh.nic.in/visa/StatusEnquiry"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title={isBn ? 'সরকারি সাইটে সরাসরি যান' : 'Open Official Govt Site'}
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Status Result Card */}
-                {statusResult && (
-                  <div className="p-3 bg-zinc-950 rounded-xl border border-emerald-500/40 space-y-1.5 animate-in fade-in duration-200">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-zinc-400 font-bangla">{isBn ? 'সরকারি স্ট্যাটাস:' : 'Official Status:'}</span>
-                      <span className="font-extrabold text-emerald-400 font-mono text-sm bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30">
-                        {statusResult.status}
-                      </span>
-                    </div>
-                    {statusResult.statusBn && (
-                      <p className="text-[11px] text-zinc-300 font-bangla font-semibold">
-                        {statusResult.statusBn}
-                      </p>
-                    )}
-                    <div className="text-[10px] text-zinc-500 font-mono flex items-center justify-between pt-1 border-t border-zinc-900">
-                      <span>File: {statusResult.webFileNumber}</span>
-                      <span>Checked: {new Date(statusResult.checkedAt).toLocaleTimeString()}</span>
-                    </div>
-                  </div>
-                )}
-
-                {statusError && (
-                  <div className="p-2.5 bg-red-950/50 rounded-xl border border-red-500/30 text-rose-300 text-xs">
-                    ⚠️ {statusError}
-                  </div>
-                )}
               </div>
 
               {/* Progress counter bar (Hidden on print) */}

@@ -1,95 +1,85 @@
 import {
-  getNextQueuedApplication,
-  updateApplication,
+  claimNextQueuedApplication,
   enqueueApplication,
   getApplicationQueuePosition,
-  getDb,
+  getNextQueuedApplication,
+  isAnyApplicationProcessing,
+  recoverStaleProcessingApplications,
+  refreshApplicationHeartbeat,
+  releaseApplicationClaim,
+  updateApplication,
 } from '@/lib/db';
 import { runApplicationAutomation } from '@/services/formRunner';
 
-// Single concurrency flag: ensures only 1 Chromium browser instance runs at a time (protects 2GB RAM VPS)
+// Chromium is memory-intensive; keep one automation per worker process.
 let isWorkerRunning = false;
-
-// Clean up stale 'processing' jobs on cold start
-try {
-  const db = getDb();
-  db.prepare(`
-    UPDATE applications
-    SET status = 'failed',
-        failure_reason = 'সার্ভার রিস্টার্টের কারণে আবেদনটি স্থগিত হয়েছে। পুনরায় রান করতে "রিজিউম" বা "রান করুন" চাপুন।',
-        status_message = 'সার্ভার রিস্টার্টের কারণে স্থগিত হয়েছিল।'
-    WHERE status = 'processing'
-  `).run();
-} catch (err) {
-  console.warn('Could not reset stale processing jobs on startup:', err);
-}
-
-// Auto-trigger worker on startup if there are existing queued jobs
-setTimeout(() => {
-  triggerQueueWorker().catch((err) => {
-    console.error('Initial queue worker check failed:', err);
-  });
-}, 2000);
 
 export function isQueueWorkerRunning(): boolean {
   return isWorkerRunning;
 }
 
-/**
- * Sequential Priority Queue Worker
- * Orders jobs strictly by:
- * 1. priority_rank ASC (1 = Agency Pro, 2 = Standard, 3 = Starter, 4 = Free)
- * 2. queued_at ASC (FIFO within same rank)
- * Strictly runs 1 automation job at a time to prevent VPS OOM memory crashes.
- */
+/** Drain the SQLite-backed priority queue, claiming jobs atomically across processes. */
 export async function triggerQueueWorker(): Promise<void> {
-  if (isWorkerRunning) {
-    return;
-  }
-
+  if (isWorkerRunning) return;
   isWorkerRunning = true;
+  const workerId = `queue-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
   try {
+    recoverStaleProcessingApplications();
     while (true) {
-      const nextJob = getNextQueuedApplication();
-      if (!nextJob) {
-        break; // Queue is empty
-      }
+      const job = claimNextQueuedApplication(workerId);
+      if (!job) break;
 
-      console.log(
-        `\n🚀 [Priority Queue] Starting Job: ${nextJob.id} | Rank: ${nextJob.priority_rank} | Applicant: ${nextJob.applicant_name} | Passport: ${nextJob.passport_number}`
-      );
-
-      const startedAt = new Date().toISOString();
-      updateApplication(nextJob.id, {
-        started_at: startedAt,
-      });
+      console.log(`[Priority Queue] Starting ${job.id} (rank ${job.priority_rank})`);
+      const heartbeat = setInterval(() => {
+        try {
+          if (!refreshApplicationHeartbeat(job.id, workerId)) {
+            console.error(`[Priority Queue] Lost claim for ${job.id}`);
+          }
+        } catch (error) {
+          console.error(`[Priority Queue] Heartbeat failed for ${job.id}:`, error);
+        }
+      }, 20_000);
 
       try {
-        await runApplicationAutomation(nextJob.id);
-      } catch (jobErr: unknown) {
-        const errorMsg = jobErr instanceof Error ? jobErr.message : String(jobErr);
-        console.error(`💥 [Priority Queue] Job ${nextJob.id} execution failed:`, errorMsg);
-      } finally {
-        updateApplication(nextJob.id, {
+        const result = await runApplicationAutomation(job.id);
+        if (!result.success) {
+          const current = updateApplication(job.id, {
+            completed_at: new Date().toISOString(),
+          });
+          if (current?.status === 'processing') {
+            updateApplication(job.id, {
+              status: 'failed',
+              failure_reason: result.error || 'Automation failed.',
+            });
+          }
+        } else {
+          updateApplication(job.id, { completed_at: new Date().toISOString() });
+        }
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[Priority Queue] Job ${job.id} failed:`, message);
+        updateApplication(job.id, {
+          status: 'failed',
+          failure_reason: message,
           completed_at: new Date().toISOString(),
         });
+      } finally {
+        clearInterval(heartbeat);
+        releaseApplicationClaim(job.id, workerId);
       }
     }
   } finally {
     isWorkerRunning = false;
-
-    // In case a job was enqueued right as we were exiting
-    const lingering = getNextQueuedApplication();
-    if (lingering) {
-      triggerQueueWorker().catch(console.error);
+    // Cover an enqueue that raced with the final empty-queue check.
+    if (!isAnyApplicationProcessing() && getNextQueuedApplication()) {
+      void triggerQueueWorker().catch((error) => {
+        console.error('[Priority Queue] Follow-up worker failed:', error);
+      });
     }
   }
 }
 
-/**
- * Enqueues an application into the priority queue and activates the single-concurrency worker.
- */
 export async function enqueueAndProcess(
   applicationId: string,
   priorityRank: number
@@ -100,11 +90,8 @@ export async function enqueueAndProcess(
   isProcessing: boolean;
 }> {
   enqueueApplication(applicationId, priorityRank);
-
-  // Trigger worker asynchronously (does not block HTTP response)
-  triggerQueueWorker().catch((err) => {
-    console.error(`[Priority Queue] Worker background error for app ${applicationId}:`, err);
+  void triggerQueueWorker().catch((error) => {
+    console.error(`[Priority Queue] Worker error for app ${applicationId}:`, error);
   });
-
   return getApplicationQueuePosition(applicationId);
 }

@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server';
 import { extractProfileFromText } from '@/lib/ai-profile-extractor';
-import { getAuthenticatedUser } from '@/lib/currentAuth';
+import { requirePermission } from '@/lib/currentAuth';
+import { apiErrorResponse } from '@/lib/api-error';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
-    // Authenticate user if signed in
-    await getAuthenticatedUser().catch(() => null);
+    await requirePermission('ai.extract');
 
     const body = await req.json().catch(() => ({}));
     const rawText = (body.text || '').trim();
@@ -46,14 +46,6 @@ export async function POST(req: Request) {
       providerUsed: result.providerUsed,
     });
   } catch (error: unknown) {
-    console.error('Error in /api/ai/extract-profile:', error);
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'EXTRACTION_FAILED',
-        message: error instanceof Error ? error.message : 'Failed to extract profile from text.',
-      },
-      { status: 500 }
-    );
+    return apiErrorResponse(error, 'Failed to extract profile from text.');
   }
 }

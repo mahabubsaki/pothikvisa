@@ -13,7 +13,7 @@ function SignUpContent() {
 
   return (
     <div className="min-h-screen bg-[#FBFBFB] flex flex-col items-center justify-center py-12 px-4 sm:px-6">
-      {/* Free Trial Value Header */}
+      {/* Free access value header */}
       <div className="max-w-md w-full text-center space-y-3 mb-6">
         <div className="flex justify-center">
           <PothikVisaLogo size={48} />
@@ -24,9 +24,6 @@ function SignUpContent() {
             <Gift className="w-3.5 h-3.5 text-emerald-600" />
             <span>নতুন অ্যাকাউন্ট অফার: ৩টি ফাইল সম্পূর্ণ ফ্রি</span>
           </div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-800 shadow-2xs font-bangla">
-            <span>⚠️ শুধুমাত্র @gmail.com প্রযোজ্য</span>
-          </div>
         </div>
 
         <h1 className="text-2xl font-extrabold text-black tracking-tight font-bangla">
@@ -34,7 +31,7 @@ function SignUpContent() {
         </h1>
 
         <p className="text-xs sm:text-sm text-[#555555] font-bangla leading-relaxed">
-          সাইন আপ করার সাথে সাথেই ড্যাশবোর্ডে ৩টি ফ্রি ইন্ডিয়ান ভিসা ওয়েব ফাইল ক্রেডিট পাবেন। কোনো ক্রেডিট কার্ড বা বিকাশ পেমেন্ট ছাড়াই স্পিড যাচাই করুন।
+          সাইন আপের পর অ্যাডমিন অনুমোদন করলে ৩টি ফ্রি ইন্ডিয়ান ভিসা ওয়েব ফাইল ক্রেডিট পাবেন। অনুমোদনের আগে ড্যাশবোর্ড ও সুরক্ষিত ফিচার বন্ধ থাকবে।
         </p>
 
         {/* Feature Checkpoints */}
@@ -46,7 +43,7 @@ function SignUpContent() {
           <span>•</span>
           <span className="flex items-center gap-1">
             <Zap className="w-3.5 h-3.5 text-emerald-600" />
-            ইনস্ট্যান্ট ৩ ক্রেডিট
+            অনুমোদনের পর ৩ ক্রেডিট
           </span>
           <span>•</span>
           <span className="flex items-center gap-1">
@@ -85,8 +82,8 @@ function SignUpContent() {
       <div className="w-full max-w-md flex justify-center">
         <SignUp
           signInUrl="/sign-in"
-          fallbackRedirectUrl="/dashboard"
-          signInFallbackRedirectUrl="/dashboard"
+          fallbackRedirectUrl="/pending-approval"
+          signInFallbackRedirectUrl="/pending-approval"
         />
       </div>
     </div>

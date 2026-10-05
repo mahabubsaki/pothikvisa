@@ -79,7 +79,7 @@ export function Navbar() {
               <div className="flex items-center gap-2">
                 {isUserAdmin && (
                   <Link
-                    href="/admin/transactions"
+                    href="/admin/users"
                     className="text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1 shrink-0"
                   >
                     <ShieldCheck className="w-3.5 h-3.5" />
@@ -113,7 +113,7 @@ export function Navbar() {
 
                 <Button asChild size="sm" className="rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-1 shadow-xs shrink-0">
                   <Link href="/sign-up">
-                    <span>{isBn ? '৩টি ফ্রি ফাইলসহ শুরু' : 'Get 3 Free Files'}</span>
+                    <span>{isBn ? 'অনুমোদনের পর প্রতিদিন ৩টি ফ্রি ফাইল' : '3 Free Files Per Day After Approval'}</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </Link>
                 </Button>
@@ -181,7 +181,7 @@ export function Navbar() {
                 <div className="space-y-2">
                   {isUserAdmin && (
                     <Link
-                      href="/admin/transactions"
+                      href="/admin/users"
                       onClick={() => setMobileMenuOpen(false)}
                       className="w-full py-2.5 px-3 text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 rounded-xl border border-amber-200 flex items-center justify-between transition-colors"
                     >
@@ -212,7 +212,7 @@ export function Navbar() {
                   </Link>
                   <Button asChild className="w-full text-xs font-bold rounded-xl h-10 bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs">
                     <Link href="/sign-up" onClick={() => setMobileMenuOpen(false)}>
-                      <span>{isBn ? '৩টি ফ্রি ফাইলসহ সাইন আপ' : 'Get 3 Free Files'}</span>
+                      <span>{isBn ? 'অনুমোদনের পর প্রতিদিন ৩টি ফ্রি ফাইল' : '3 Free Files Per Day After Approval'}</span>
                       <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
                     </Link>
                   </Button>

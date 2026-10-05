@@ -1,20 +1,24 @@
 import { NextResponse } from 'next/server';
-import { getAuthenticatedUser } from '@/lib/currentAuth';
+import { requirePermission } from '@/lib/currentAuth';
+import { apiErrorResponse } from '@/lib/api-error';
 import { getSavedProfileById, getDb, SavedProfileRecord } from '@/lib/db';
 import { downloadR2Buffer } from '@/lib/r2';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+function storedKey(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  if (value.startsWith('storage:')) return value.slice('storage:'.length);
+  return null;
+}
+
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getAuthenticatedUser();
-    if (!user) {
-      return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
-    }
+    const user = await requirePermission('profiles.read');
 
     const { id } = await params;
     let profile = getSavedProfileById(id, user.id);
@@ -42,10 +46,8 @@ export async function GET(
       try {
         passportBuffer = await downloadR2Buffer(passportKey);
       } catch {
-        if (existingData.passportPdfUrl && typeof existingData.passportPdfUrl === 'string') {
-          const customKey = existingData.passportPdfUrl.replace(/^\/uploads\//, '');
-          passportBuffer = await downloadR2Buffer(customKey);
-        }
+        const customKey = storedKey(existingData.passportPdfUrl);
+        if (customKey) passportBuffer = await downloadR2Buffer(customKey);
       }
 
       if (passportBuffer && passportBuffer.length > 0) {
@@ -66,10 +68,8 @@ export async function GET(
       try {
         photoBuffer = await downloadR2Buffer(photoKey);
       } catch {
-        if (existingData.photoUrl && typeof existingData.photoUrl === 'string') {
-          const customKey = existingData.photoUrl.replace(/^\/uploads\//, '');
-          photoBuffer = await downloadR2Buffer(customKey);
-        }
+        const customKey = storedKey(existingData.photoUrl);
+        if (customKey) photoBuffer = await downloadR2Buffer(customKey);
       }
 
       if (photoBuffer && photoBuffer.length > 0) {
@@ -91,8 +91,6 @@ export async function GET(
       photo,
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Failed to retrieve profile media';
-    console.error('Error in profile media route:', error);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiErrorResponse(error, 'Failed to retrieve profile media');
   }
 }

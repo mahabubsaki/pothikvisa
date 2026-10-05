@@ -4,13 +4,13 @@ declare global {
   interface CustomJwtSessionClaims {
     metadata?: {
       role?: 'user' | 'admin';
-      plan?: 'free' | 'starter' | 'standard' | 'agency';
+      plan?: 'free' | 'paid';
     };
   }
 
   interface UserPublicMetadata {
     role?: 'user' | 'admin';
-    plan?: 'free' | 'starter' | 'standard' | 'agency';
+    plan?: 'free' | 'paid';
     quotaTotal?: number;
     quotaUsed?: number;
   }
@@ -19,7 +19,7 @@ declare global {
 declare module '@clerk/types' {
   interface UserPublicMetadata {
     role?: 'user' | 'admin';
-    plan?: 'free' | 'starter' | 'standard' | 'agency';
+    plan?: 'free' | 'paid';
     quotaTotal?: number;
     quotaUsed?: number;
   }

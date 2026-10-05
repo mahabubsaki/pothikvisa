@@ -62,7 +62,7 @@ export function BatchProcessingModal({
 
   if (!isOpen) return null;
 
-  const isAgencyOrAdmin = isAdmin || userPlan === 'agency';
+  const isAgencyOrAdmin = isAdmin || userPlan === 'paid';
 
   // Filter profiles based on search
   const filteredProfiles = profiles.filter((p) => {
@@ -131,7 +131,7 @@ export function BatchProcessingModal({
             <div className="flex items-center gap-2">
               <Layers className="w-4 h-4 text-emerald-400" />
               <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 text-[10px] font-bold">
-                Agency Pro Exclusive
+                Paid Feature
               </Badge>
               <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30 text-[10px] font-bold">
                 Priority Rank 1
@@ -158,7 +158,7 @@ export function BatchProcessingModal({
 
         {/* Content Body */}
         {!isAgencyOrAdmin ? (
-          /* Non-Agency Pro Upgrade Gate */
+          /* Paid upgrade gate */
           <div className="p-6 sm:p-8 space-y-6 text-center">
             <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
               <Zap className="w-7 h-7" />
@@ -166,12 +166,12 @@ export function BatchProcessingModal({
 
             <div className="space-y-2 max-w-md mx-auto">
               <h4 className="text-lg font-bold text-zinc-900 font-bangla">
-                {isBn ? 'ব্যাচ প্রসেসিং আনলক করতে Agency Pro-তে আপগ্রেড করুন' : 'Upgrade to Agency Pro to Unlock Batch Processing'}
+                {isBn ? 'ব্যাচ প্রসেসিং আনলক করতে পেইড প্ল্যানে আপগ্রেড করুন' : 'Upgrade to Paid to unlock batch processing'}
               </h4>
               <p className="text-xs text-zinc-600 font-bangla leading-relaxed">
                 {isBn
-                  ? 'মাল্টি-অ্যাপ্লিক্যান্ট ব্যাচ প্রসেসিং শুধুমাত্র Agency Pro গ্রাহকদের জন্য নির্ধারিত। ট্রাভেল এজেন্সি ও ভিসা এজেন্টদের জন্য এক ক্লিকে ১০টি পর্যন্ত প্রোফাইল স্বয়ংক্রিয়ভাবে কিউতে দেওয়ার সুবিধা।'
-                  : 'Multi-applicant batch queuing allows agencies to launch 5-10+ client profiles simultaneously with Rank 1 priority queue status.'}
+                  ? 'পেইড ব্যবহারকারীরা এক ক্লিকে একাধিক প্রোফাইল প্রায়োরিটি কিউতে দিতে পারবেন।'
+                  : 'Paid users can launch multiple client profiles together in the priority queue.'}
               </p>
             </div>
 
@@ -192,8 +192,8 @@ export function BatchProcessingModal({
 
             <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
               <Button asChild className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold px-6 h-11 w-full sm:w-auto">
-                <Link href="/checkout?plan=agency">
-                  <span>{isBn ? 'Agency Pro-তে আপগ্রেড করুন (৫০০ ৳)' : 'Upgrade to Agency Pro (500 ৳)'}</span>
+                <Link href="/checkout?plan=paid">
+                  <span>{isBn ? 'পেইড প্ল্যানে আপগ্রেড করুন (৫০০ ৳)' : 'Upgrade to Paid (500 ৳)'}</span>
                   <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
                 </Link>
               </Button>
@@ -210,8 +210,8 @@ export function BatchProcessingModal({
               <div className="space-y-1">
                 <h4 className="text-sm font-bold font-bangla">
                   {isBn
-                    ? `সাফল্যের সাথে ${batchResults.count}টি আবেদন Agency Pro প্রায়োরিটি কিউতে যোগ করা হয়েছে!`
-                    : `Successfully enqueued ${batchResults.count} applications with Agency Pro Rank 1!`}
+                    ? `সাফল্যের সাথে ${batchResults.count}টি আবেদন পেইড প্রায়োরিটি কিউতে যোগ করা হয়েছে!`
+                    : `Successfully enqueued ${batchResults.count} applications in the paid priority queue!`}
                 </h4>
                 <p className="text-xs text-emerald-800 font-bangla">
                   {isBn
@@ -399,8 +399,8 @@ export function BatchProcessingModal({
                 <Clock className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
                 <span>
                   {isBn
-                    ? 'ক্রমানুসারে সম্পন্ন হবে (Agency Pro সর্বোচ্চ অগ্রাধিকার)'
-                    : 'Processed with Agency Pro Rank 1 priority.'}
+                    ? 'পেইড প্রায়োরিটি অনুযায়ী ক্রমানুসারে সম্পন্ন হবে'
+                    : 'Processed with paid priority.'}
                 </span>
               </div>
 

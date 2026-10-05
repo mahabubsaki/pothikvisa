@@ -39,7 +39,7 @@ export async function validatePassportPhoto(
     };
   }
 
-  // Size check (Minimum 10 KB; Starter: max 1 MB, Standard/Pro: max 20 MB)
+  // Size check (Minimum 10 KB; Free: max 1 MB, Paid: max 20 MB)
   const sizeKb = Math.round(file.size / 1024);
   if (sizeKb < 10) {
     return {
@@ -54,8 +54,8 @@ export async function validatePassportPhoto(
     if (!isStandard) {
       return {
         valid: false,
-        error: `Photo file size (${sizeKb} KB) exceeds the 1 MB limit on Starter plan. Upgrade to Standard or Agency Pro to upload images up to 20 MB.`,
-        errorBn: `Starter প্ল্যানে ছবির সাইজ সর্বোচ্চ ১ MB (১০২৪ KB)। ২০ MB পর্যন্ত বড় ছবি আপলোড করতে Standard বা Agency Pro প্ল্যানে আপগ্রেড করুন।`,
+        error: `Photo file size (${sizeKb} KB) exceeds the 1 MB Free limit. Upgrade to Paid to upload images up to 20 MB.`,
+        errorBn: `ফ্রি প্ল্যানে ছবির সাইজ সর্বোচ্চ ১ MB। ২০ MB পর্যন্ত ছবি আপলোড করতে পেইড প্ল্যানে আপগ্রেড করুন।`,
       };
     } else {
       return {
@@ -160,8 +160,8 @@ export async function validatePassportDocument(
     if (!isStandard) {
       return {
         valid: false,
-        error: `Passport PDF size (${sizeKb} KB) exceeds the 500 KB limit on Starter plan. Upgrade to Standard or Agency Pro to upload files up to 10 MB.`,
-        errorBn: `Starter প্ল্যানে পাসপোর্ট পিডিএফ ফাইলের সাইজ সর্বোচ্চ ৫০০ KB। ১০ MB পর্যন্ত বড় ফাইল আপলোড করতে Standard বা Agency Pro প্ল্যানে আপগ্রেড করুন।`,
+        error: `Passport PDF size (${sizeKb} KB) exceeds the 500 KB Free limit. Upgrade to Paid to upload files up to 10 MB.`,
+        errorBn: `ফ্রি প্ল্যানে পাসপোর্ট পিডিএফ সর্বোচ্চ ৫০০ KB। ১০ MB পর্যন্ত ফাইল আপলোড করতে পেইড প্ল্যানে আপগ্রেড করুন।`,
       };
     } else {
       return {
@@ -193,4 +193,3 @@ export async function validatePassportDocument(
     };
   }
 }
-

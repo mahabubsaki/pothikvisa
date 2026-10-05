@@ -370,7 +370,7 @@ export const DEFAULT_BLANK_PROFILE = {
     email: '',
     reEnterEmail: '',
     expectedDateOfArrival: '',
-    visaPurpose: '544' as VisaPurposeCode,
+    visaPurpose: '' as VisaPurposeCode,
   },
   step2_applicant_details: {
     surname: '',
@@ -473,3 +473,26 @@ export const DEFAULT_BLANK_PROFILE = {
   },
   submitFinalApplication: false,
 };
+
+export function sanitizeProfileDefaults(profile: any): any {
+  if (!profile) return profile;
+  if (!profile.step1_registration) profile.step1_registration = {};
+  if (!profile.step1_registration.countryApplyingFrom) profile.step1_registration.countryApplyingFrom = 'BGD';
+  if (!profile.step1_registration.nationality) profile.step1_registration.nationality = 'BGD';
+
+  if (!profile.step2_applicant_details) profile.step2_applicant_details = {};
+  if (!profile.step2_applicant_details.birthCountry) profile.step2_applicant_details.birthCountry = 'BGD';
+  if (!profile.step2_applicant_details.nationalityAcquiredBy) profile.step2_applicant_details.nationalityAcquiredBy = 'BY BIRTH';
+  if (!profile.step2_applicant_details.passportPlaceOfIssue) profile.step2_applicant_details.passportPlaceOfIssue = 'DHAKA';
+
+  if (!profile.step3_family_address) profile.step3_family_address = {};
+  if (!profile.step3_family_address.presentCountry) profile.step3_family_address.presentCountry = 'BGD';
+  if (!profile.step3_family_address.mobileIsdCode) profile.step3_family_address.mobileIsdCode = '880';
+  if (profile.step3_family_address.sameAddress === undefined) profile.step3_family_address.sameAddress = true;
+  if (!profile.step3_family_address.fatherNationality) profile.step3_family_address.fatherNationality = 'BGD';
+  if (!profile.step3_family_address.fatherCountryOfBirth) profile.step3_family_address.fatherCountryOfBirth = 'BGD';
+  if (!profile.step3_family_address.motherNationality) profile.step3_family_address.motherNationality = 'BGD';
+  if (!profile.step3_family_address.motherCountryOfBirth) profile.step3_family_address.motherCountryOfBirth = 'BGD';
+
+  return profile;
+}

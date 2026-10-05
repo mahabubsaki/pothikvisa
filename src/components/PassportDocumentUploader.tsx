@@ -46,7 +46,7 @@ export function PassportDocumentUploader({
   onPassportExtracted,
   onPdfUploaded,
   onClear,
-  plan = 'starter',
+  plan = 'free',
   isStandardSubscriber = false,
   hasError = false,
   errorMessage,
@@ -102,8 +102,8 @@ export function PassportDocumentUploader({
       if (!isStandardSubscriber) {
         setErrorMsg(
           isBn
-            ? `Starter প্ল্যানে পিডিএফের সাইজ সর্বোচ্চ ৫০০ KB। ১০ MB পর্যন্ত বড় ফাইল আপলোড করতে Standard বা Agency Pro প্ল্যানে আপগ্রেড করুন। (${sizeKb} KB আপলোড করেছেন)`
-            : `On Starter plan, PDF size limit is 500 KB. Upgrade to Standard or Agency Pro to upload files up to 10 MB. (Uploaded: ${sizeKb} KB)`
+            ? `ফ্রি প্ল্যানে পিডিএফের সাইজ সর্বোচ্চ ৫০০ KB। ১০ MB পর্যন্ত ফাইল আপলোড করতে পেইড প্ল্যানে আপগ্রেড করুন। (${sizeKb} KB আপলোড করেছেন)`
+            : `On Free, the PDF limit is 500 KB. Upgrade to Paid for files up to 10 MB. (Uploaded: ${sizeKb} KB)`
         );
       } else {
         setErrorMsg(
@@ -149,7 +149,7 @@ export function PassportDocumentUploader({
 
       setExtractedData(data.fields);
       // NOTE: We deliberately DO NOT auto-fill immediately per user request.
-      // Auto-fill is executed via the explicit button below if standard subscription holder.
+      // Auto-fill is executed via the explicit button below for paid users.
     } catch (err: unknown) {
       setErrorMsg(
         (err instanceof Error ? err.message : '') ||
@@ -348,7 +348,7 @@ export function PassportDocumentUploader({
         </div>
       </div>
 
-      {/* Auto-fill trigger button for Standard & Agency Pro subscription holders */}
+      {/* Auto-fill trigger button for paid users. */}
       {extractedData && currentFile && (
         <div className="pt-2 border-t border-zinc-100 flex flex-col sm:flex-row items-center justify-between gap-2.5">
           {isStandardSubscriber ? (
@@ -360,7 +360,7 @@ export function PassportDocumentUploader({
                 <span className="text-[11px] text-emerald-700 font-bangla block">
                   {isBn
                     ? 'স্ট্যান্ডার্ড ও এজেন্সি প্রো সাবস্ক্রিপশন সচল রয়েছে। নিচের বাটনে ক্লিক করলে ২য় ও ৩য় ধাপ স্বয়ংক্রিয়ভাবে পূরণ হবে।'
-                    : 'Standard & Agency Pro subscription active. Click button below to populate Steps 2 & 3.'}
+                    : 'Paid access is active. Click below to populate Steps 2 and 3.'}
                 </span>
               </div>
               <Button
@@ -394,11 +394,11 @@ export function PassportDocumentUploader({
                 <span className="text-[11px] text-amber-800 font-medium">
                   {isBn
                     ? 'পাসপোর্ট থেকে স্বয়ংক্রিয় এআই ফর্ম পূরণের জন্য স্ট্যান্ডার্ড বা এজেন্সি প্রো সাবস্ক্রিপশন প্রয়োজন।'
-                    : 'AI auto-fill from Passport PDF requires a Standard or Agency Pro Subscription.'}
+                    : 'AI auto-fill from Passport PDF requires Paid access.'}
                 </span>
               </div>
               <Badge className="bg-amber-600 text-white text-[10px] shrink-0 font-bangla">
-                {isBn ? 'স্ট্যান্ডার্ড ও প্রো ফিচার' : 'Standard & Pro Tier'}
+                {isBn ? 'পেইড ফিচার' : 'Paid feature'}
               </Badge>
             </div>
           )}
@@ -439,7 +439,7 @@ export function PassportDocumentUploader({
           <span>
             {isBn
               ? 'স্ট্যান্ডার্ড ও এজেন্সি প্রো সুবিধা: যেকোনো সাইজের পিডিএফ আপলোড করুন (১০ MB পর্যন্ত), আমরা স্বয়ংক্রিয়ভাবে অপটিমাইজ করে নেব।'
-              : 'Standard & Agency Pro Feature: Upload any size of PDF (up to 10 MB) — we will enhance based on requirement.'}
+              : 'Paid feature: upload PDFs up to 10 MB and we will optimize them automatically.'}
           </span>
         </div>
       ) : (

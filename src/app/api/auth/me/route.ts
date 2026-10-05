@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAuthenticatedUser } from '@/lib/currentAuth';
+import { ACCESS_POLICY } from '@/lib/access-policy';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -12,7 +13,7 @@ const NO_CACHE_HEADERS = {
 
 export async function GET() {
   try {
-    const profile = await getAuthenticatedUser();
+    const profile = await getAuthenticatedUser({ allowUnapproved: true });
     return NextResponse.json(
       {
         authenticated: !!profile,
@@ -24,10 +25,17 @@ export async function GET() {
               email: profile.email,
               role: profile.role,
               isAdmin: profile.isAdmin,
+              accountStatus: profile.accountStatus,
+              tier: profile.tier,
               authProvider: profile.authProvider,
             }
           : null,
         subscription: profile?.subscription || null,
+        permissions: profile?.isAdmin
+          ? ACCESS_POLICY.paid.permissions
+          : profile?.tier
+            ? ACCESS_POLICY[profile.tier].permissions
+            : [],
       },
       { headers: NO_CACHE_HEADERS }
     );

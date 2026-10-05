@@ -40,7 +40,7 @@ export function ConsularPhotoCropper({
   hasError = false,
   errorMessage,
   isStandardSubscriber = false,
-  plan = 'starter',
+  plan = 'free',
 }: ConsularPhotoCropperProps) {
   const { isBn } = useLanguage();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -103,8 +103,8 @@ export function ConsularPhotoCropper({
       if (!isStandardSubscriber) {
         setErrorMsg(
           isBn
-            ? `Starter প্ল্যানে ছবির সাইজ সর্বোচ্চ ১ MB (১০২৪ KB)। ২০ MB পর্যন্ত বড় ছবি আপলোড করতে Standard বা Agency Pro প্ল্যানে আপগ্রেড করুন। (${sizeKb} KB আপলোড করেছেন)`
-            : `On Starter plan, photo size limit is 1 MB (1024 KB). Upgrade to Standard or Agency Pro to upload photos up to 20 MB. (Uploaded: ${sizeKb} KB)`
+            ? `ফ্রি প্ল্যানে ছবির সাইজ সর্বোচ্চ ১ MB। ২০ MB পর্যন্ত ছবি আপলোড করতে পেইড প্ল্যানে আপগ্রেড করুন। (${sizeKb} KB আপলোড করেছেন)`
+            : `On Free, the photo limit is 1 MB. Upgrade to Paid for photos up to 20 MB. (Uploaded: ${sizeKb} KB)`
         );
       } else {
         setErrorMsg(
@@ -380,7 +380,7 @@ export function ConsularPhotoCropper({
             <span>
               {isBn
                 ? 'স্ট্যান্ডার্ড ও এজেন্সি প্রো সুবিধা: যেকোনো সাইজের ছবি (JPG / JPEG) আপলোড করুন (২০ MB পর্যন্ত), আমরা স্বয়ংক্রিয়ভাবে অপটিমাইজ করে নেব।'
-                : 'Standard & Agency Pro Feature: Upload any size of photo (JPG / JPEG up to 20 MB) — we will enhance based on requirement.'}
+                : 'Paid feature: upload JPG or JPEG photos up to 20 MB for automatic optimization.'}
             </span>
           </div>
         ) : (

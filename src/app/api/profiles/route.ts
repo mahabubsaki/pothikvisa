@@ -1,141 +1,85 @@
 import { NextResponse } from 'next/server';
-import { getAuthenticatedUser } from '@/lib/currentAuth';
+import { requirePermission } from '@/lib/currentAuth';
+import { apiErrorResponse } from '@/lib/api-error';
 import {
-  getUserSavedProfiles,
-  saveOrUpdateProfile,
   deleteSavedProfile,
   getMaxProfilesForPlan,
+  getUserSavedProfiles,
+  saveOrUpdateProfile,
 } from '@/lib/db';
 
-export async function GET(req: Request) {
+export async function GET() {
   try {
-    const user = await getAuthenticatedUser();
-    if (!user) {
-      return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
-    }
-
-    const profiles = getUserSavedProfiles(user.id);
-    const plan = user.subscription?.plan || 'starter';
-    const maxAllowed = getMaxProfilesForPlan(plan, user.isAdmin);
-
-    return NextResponse.json({ profiles, maxAllowed, plan });
+    const user = await requirePermission('profiles.read');
+    const plan = user.subscription?.plan || 'free';
+    return NextResponse.json({
+      profiles: getUserSavedProfiles(user.id),
+      maxAllowed: getMaxProfilesForPlan(plan, user.isAdmin),
+      plan,
+    });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Failed to fetch profiles';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiErrorResponse(error, 'Failed to fetch profiles');
   }
 }
 
-export async function POST(req: Request) {
+export async function POST(request: Request) {
   try {
-    const user = await getAuthenticatedUser();
-    if (!user) {
-      return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
+    const user = await requirePermission('profiles.write');
+    const body = await request.json();
+    const id = typeof body.id === 'string' ? body.id : undefined;
+    const profileName = typeof body.profileName === 'string' ? body.profileName.trim() : '';
+    const passportNumber = typeof body.passportNumber === 'string' ? body.passportNumber.trim().toUpperCase() : '';
+    const data = body.data;
+    if (!profileName || !passportNumber || !data || typeof data !== 'object') {
+      return NextResponse.json({ error: 'Profile name, passport number, and profile data are required.' }, { status: 400 });
     }
 
-    const body = await req.json();
-    const { id, profileName, passportNumber, data } = body;
-
-    if (!profileName || !passportNumber || !data) {
-      return NextResponse.json(
-        { error: 'INVALID_DATA', message: 'Profile name, passport number, and data are required.' },
-        { status: 400 }
-      );
-    }
-
-    // Check plan limits when creating a brand-new profile
-    const existingProfiles = getUserSavedProfiles(user.id);
-    const cleanPassport = (passportNumber || '').trim().toUpperCase();
+    const profiles = getUserSavedProfiles(user.id);
     const isExisting = Boolean(
-      (id && existingProfiles.some((p) => p.id === id)) ||
-      (cleanPassport && existingProfiles.some((p) => p.passport_number.toUpperCase() === cleanPassport))
+      (id && profiles.some((profile) => profile.id === id)) ||
+      profiles.some((profile) => profile.passport_number.toUpperCase() === passportNumber)
     );
-
-    if (!isExisting && !user.isAdmin) {
-      const plan = user.subscription?.plan || 'starter';
-      const maxAllowed = getMaxProfilesForPlan(plan, user.isAdmin);
-
-      if (existingProfiles.length >= maxAllowed) {
-        const planNameBn =
-          plan === 'agency'
-            ? 'এজেন্সি প্রো (Agency Pro)'
-            : plan === 'standard'
-              ? 'স্ট্যান্ডার্ড (Standard)'
-              : plan === 'starter'
-                ? 'স্টার্টার (Starter)'
-                : 'ফ্রি ট্রায়াল (Free Trial)';
-        const upgradeSuggestion =
-          plan === 'free'
-            ? 'পরিবার বা ক্লায়েন্টের একাধিক প্রোফাইল সেভ করতে স্টার্টার প্ল্যানে (১৫০ ৳) আপগ্রেড করুন অথবা পূর্বে সংরক্ষিত প্রোফাইলটি মুছে ফেলুন।'
-            : 'আরও প্রোফাইল সংরক্ষণ করতে প্ল্যান আপগ্রেড করুন অথবা পূর্বে সংরক্ষিত অপ্রয়োজনীয় প্রোফাইল মুছে ফেলুন।';
-
-        return NextResponse.json(
-          {
-            error: 'PROFILE_LIMIT_REACHED',
-            message: `আপনার ${planNameBn} অ্যাকাউন্টে সর্বোচ্চ ${maxAllowed}টি প্রোফাইল সংরক্ষণের সীমা পূর্ণ হয়েছে (${existingProfiles.length}/${maxAllowed})। ${upgradeSuggestion}`,
-            maxAllowed,
-            currentCount: existingProfiles.length,
-          },
-          { status: 403 }
-        );
-      }
+    const plan = user.subscription?.plan || 'free';
+    const maxAllowed = getMaxProfilesForPlan(plan, user.isAdmin);
+    if (!isExisting && profiles.length >= maxAllowed) {
+      return NextResponse.json({
+        error: 'PROFILE_LIMIT_REACHED',
+        message: `Your ${plan} tier allows ${maxAllowed} saved profile${maxAllowed === 1 ? '' : 's'}.`,
+        maxAllowed,
+        currentCount: profiles.length,
+      }, { status: 403 });
     }
 
-    const saved = saveOrUpdateProfile({
+    const profile = saveOrUpdateProfile({
       id,
       userId: user.id,
       profileName,
       passportNumber,
       data,
     });
-
-    return NextResponse.json({ success: true, profile: saved });
+    return NextResponse.json({ success: true, profile });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Failed to save profile';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiErrorResponse(error, 'Failed to save profile');
   }
 }
 
-export async function DELETE(req: Request) {
+export async function DELETE(request: Request) {
   try {
-    const user = await getAuthenticatedUser();
-    if (!user) {
-      return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
-    }
-
-    let profileId: string | null = null;
-    const { searchParams } = new URL(req.url);
-    profileId = searchParams.get('id');
-
+    const user = await requirePermission('profiles.write');
+    const { searchParams } = new URL(request.url);
+    let profileId = searchParams.get('id');
     if (!profileId) {
-      try {
-        const body = await req.json();
-        profileId = body?.id || null;
-      } catch {
-        // No json body provided
-      }
+      const body = await request.json().catch(() => null) as { id?: string } | null;
+      profileId = body?.id || null;
     }
-
     if (!profileId) {
-      return NextResponse.json(
-        { error: 'INVALID_DATA', message: 'Profile ID is required to delete.' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Profile ID is required.' }, { status: 400 });
     }
-
-    const success = deleteSavedProfile(profileId, user.id);
-    if (!success) {
-      return NextResponse.json(
-        { error: 'NOT_FOUND', message: 'Profile not found or already deleted.' },
-        { status: 404 }
-      );
+    if (!deleteSavedProfile(profileId, user.id)) {
+      return NextResponse.json({ error: 'Profile not found.' }, { status: 404 });
     }
-
-    return NextResponse.json({
-      success: true,
-      message: 'Profile deleted successfully.',
-    });
+    return NextResponse.json({ success: true });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Failed to delete profile';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiErrorResponse(error, 'Failed to delete profile');
   }
 }

@@ -1,38 +1,33 @@
 import { NextResponse } from 'next/server';
-import { getAuthenticatedUser } from '@/lib/currentAuth';
+import { requireAuthenticatedUser } from '@/lib/currentAuth';
+import { apiErrorResponse } from '@/lib/api-error';
 import { createTransaction } from '@/lib/db';
 
 export async function POST(req: Request) {
   try {
-    const user = await getAuthenticatedUser();
-    if (!user) {
-      return NextResponse.json(
-        { error: 'You must be logged in to submit a payment' },
-        { status: 401 }
-      );
-    }
+    const user = await requireAuthenticatedUser();
 
-    const { plan, amount, mfsMethod, senderPhone, trxId, note } = await req.json();
+    const { mfsMethod, senderPhone, trxId, note } = await req.json();
 
-    if (!plan || !amount || !mfsMethod || !senderPhone || !trxId) {
+    if (!mfsMethod || !senderPhone || !trxId) {
       return NextResponse.json(
-        { error: 'Plan, amount, MFS method, sender phone, and TrxID are required' },
+        { error: 'MFS method, sender phone, and TrxID are required' },
         { status: 400 }
       );
-    }
-
-    if (!['starter', 'standard', 'agency'].includes(plan)) {
-      return NextResponse.json({ error: 'Invalid plan selected' }, { status: 400 });
     }
 
     if (!['bkash', 'nagad', 'rocket'].includes(mfsMethod)) {
       return NextResponse.json({ error: 'Invalid payment method' }, { status: 400 });
     }
+    if (!/^01\d{9}$/.test(String(senderPhone).trim())) {
+      return NextResponse.json({ error: 'Enter a valid 11-digit Bangladesh phone number' }, { status: 400 });
+    }
+    if (!/^[A-Za-z0-9-]{5,40}$/.test(String(trxId).trim())) {
+      return NextResponse.json({ error: 'Enter a valid transaction ID' }, { status: 400 });
+    }
 
     const transaction = createTransaction({
       userId: user.id,
-      plan,
-      amount: Number(amount),
       mfsMethod,
       senderPhone,
       trxId,
@@ -51,9 +46,6 @@ export async function POST(req: Request) {
         { status: 409 }
       );
     }
-    return NextResponse.json(
-      { error: message },
-      { status: 500 }
-    );
+    return apiErrorResponse(error, 'Failed to submit payment');
   }
 }

@@ -7,12 +7,8 @@ import { motion } from 'motion/react';
 import {
   User,
   Shield,
-  CreditCard,
-  FileText,
-  Clock,
   CheckCircle2,
   AlertCircle,
-  XCircle,
   ArrowRight,
   PlusCircle,
   ExternalLink,
@@ -24,15 +20,10 @@ import {
   ChevronRight,
   ShieldCheck,
   Building,
-  Play,
   Trash2,
-  Download,
-  Terminal,
   FileCheck,
   Globe,
-  Edit3,
   X,
-  QrCode,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -43,60 +34,28 @@ import { LiveAutomationModal } from '@/components/LiveAutomationModal';
 import { IvacChecklistModal } from '@/components/IvacChecklistModal';
 import { EditAndResumeModal } from '@/components/EditAndResumeModal';
 import { ApplicationQrModal } from '@/components/ApplicationQrModal';
+import { PaymentHistory, type PaymentTransaction } from '@/components/dashboard/PaymentHistory';
+import { ApplicationHistory, type ApplicationItem } from '@/components/dashboard/ApplicationHistory';
 import { useClerk, useUser } from '@clerk/nextjs';
-
-export interface ApplicationItem {
-  id: string;
-  applicant_name: string;
-  passport_number: string;
-  visa_type: string;
-  temp_id?: string | null;
-  web_file_number?: string | null;
-  status: 'draft' | 'queued' | 'processing' | 'completed' | 'failed';
-  priority_rank?: number;
-  queue_position?: number;
-  estimated_wait?: string;
-  current_step: number;
-  failed_step?: number | null;
-  failure_reason?: string | null;
-  pdf_path?: string | null;
-  photo_url?: string | null;
-  passport_pdf_url?: string | null;
-  final_pdf_url?: string | null;
-  status_message?: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-interface Transaction {
-  id: string;
-  plan: 'starter' | 'standard' | 'agency';
-  amount: number;
-  mfs_method: 'bkash' | 'nagad' | 'rocket';
-  sender_phone: string;
-  trx_id: string;
-  status: 'pending' | 'approved' | 'rejected';
-  note?: string;
-  created_at: string;
-  reviewed_at?: string;
-}
 
 interface UserProfile {
   id: string;
   name: string;
   email: string;
   role: 'user' | 'admin';
+  accountStatus: 'pending' | 'approved' | 'suspended';
+  tier: 'free' | 'paid' | null;
   authProvider: 'clerk' | 'local';
 }
 
 interface SubscriptionData {
   id: string;
-  plan: 'free' | 'starter' | 'standard' | 'agency';
-  status: 'active' | 'expired' | 'canceled';
-  quota_total: number;
+  plan: 'free' | 'paid';
+  status: 'active' | 'expired' | 'revoked';
+  quota_total: number | null;
   quota_used: number;
   starts_at: string;
-  expires_at: string;
+  expires_at: string | null;
 }
 
 export default function DashboardPage() {
@@ -110,7 +69,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [transactions, setTransactions] = useState<PaymentTransaction[]>([]);
   const [applications, setApplications] = useState<ApplicationItem[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
@@ -161,6 +120,10 @@ export default function DashboardPage() {
         if (isClerkLoaded && !isSignedIn) {
           router.push('/sign-in');
         }
+        return;
+      }
+      if (authData.user.accountStatus !== 'approved') {
+        router.replace('/pending-approval');
         return;
       }
       setUser(authData.user);
@@ -318,22 +281,6 @@ export default function DashboardPage() {
     signOut({ redirectUrl: '/' });
   };
 
-  // The proxy is the authoritative Gmail restriction check. Invalid sessions
-  // are redirected before this page can render.
-  if (false) {
-    return (
-      <div className="min-h-screen bg-[#FBFBFB] flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white border border-red-200 rounded-2xl p-6 text-center space-y-3 shadow-xs">
-          <AlertCircle className="w-10 h-10 text-red-600 mx-auto" />
-          <h2 className="text-base font-bold text-gray-900 font-bangla">অননুমোদিত অ্যাকাউন্ট</h2>
-          <p className="text-xs text-gray-600 font-bangla leading-relaxed">
-            শুধুমাত্র ব্যক্তিগত @gmail.com অ্যাকাউন্ট অনুমোদিত। আপনাকে সাইন ইন পেজে পাঠানো হচ্ছে...
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   if (loading) {
     return (
       <div className="min-h-screen bg-[#FBFBFB] flex items-center justify-center">
@@ -347,13 +294,14 @@ export default function DashboardPage() {
     );
   }
 
-  const quotaRemaining = subscription
+  const quotaRemaining = subscription?.quota_total !== null && subscription?.quota_total !== undefined
     ? Math.max(0, subscription.quota_total - subscription.quota_used)
     : 0;
-  const isUnlimited = subscription?.plan === 'agency';
+  const isUnlimited = subscription?.quota_total === null;
   const quotaPercent = isUnlimited
     ? 100
     : subscription
+    && subscription.quota_total !== null
     ? Math.min(100, Math.round((subscription.quota_used / subscription.quota_total) * 100))
     : 0;
 
@@ -470,19 +418,17 @@ export default function DashboardPage() {
                 <div className="flex items-baseline justify-between">
                   <div>
                     <span className="text-2xl font-black uppercase tracking-tight text-black">
-                      {subscription.plan === 'free' && (isBn ? '🎁 ফ্রি ট্রায়াল (৩টি ওয়েব ফাইল)' : '🎁 Free Trial (3 Web Files)')}
-                      {subscription.plan === 'starter' && (isBn ? 'স্টার্টার প্ল্যান' : 'Starter Plan')}
-                      {subscription.plan === 'standard' && (isBn ? 'স্ট্যান্ডার্ড প্ল্যান' : 'Standard Plan')}
-                      {subscription.plan === 'agency' && (isBn ? 'এজেন্সি প্রো (আনলিমিটেড)' : 'Agency Pro')}
+                      {subscription.plan === 'paid' && (isBn ? 'পেইড প্ল্যান' : 'Paid Plan')}
+                      {subscription.plan === 'free' && (isBn ? '🎁 ফ্রি (প্রতিদিন ৩টি ওয়েব ফাইল)' : '🎁 Free (3 Web Files Per Day)')}
                     </span>
                     <div className="text-xs text-[#666666] mt-0.5">
                       {isBn ? 'মেয়াদ শেষ:' : 'Expires:'}{' '}
                       <span className="font-semibold text-black">
-                        {new Date(subscription.expires_at).toLocaleDateString(isBn ? 'bn-BD' : 'en-US', {
+                        {subscription.expires_at ? new Date(subscription.expires_at).toLocaleDateString(isBn ? 'bn-BD' : 'en-US', {
                           day: 'numeric',
                           month: 'long',
                           year: 'numeric',
-                        })}
+                        }) : (isBn ? 'মেয়াদ নেই' : 'No expiry')}
                       </span>
                     </div>
                   </div>
@@ -509,7 +455,7 @@ export default function DashboardPage() {
                     <div className="w-full bg-[#EEEEEE] rounded-full h-2.5 overflow-hidden">
                       <div
                         className="bg-emerald-500 h-2.5 rounded-full transition-all duration-500"
-                        style={{ width: `${Math.min(100, (subscription.quota_used / subscription.quota_total) * 100)}%` }}
+                        style={{ width: `${quotaPercent}%` }}
                       />
                     </div>
                     <div className="flex justify-between text-[10px] text-[#888888]">
@@ -524,7 +470,7 @@ export default function DashboardPage() {
                     {isBn ? 'আরো কোটা বা নতুন প্ল্যান নিতে চান?' : 'Need more quota or upgrade?'}
                   </span>
                   <Button asChild size="sm" variant="outline" className="rounded-xl text-xs font-bold">
-                    <Link href="/checkout?plan=standard">
+                    <Link href="/checkout?plan=paid">
                       <span>{isBn ? 'প্ল্যান রিনিউ বা পরিবর্তন' : 'Renew or Upgrade'}</span>
                       <ArrowRight className="w-3.5 h-3.5 ml-1" />
                     </Link>
@@ -539,8 +485,8 @@ export default function DashboardPage() {
                     : 'You do not have an active subscription. Choose a plan to unlock automated visa filing.'}
                 </p>
                 <Button asChild className="rounded-full text-xs font-bold">
-                  <Link href="/checkout?plan=standard">
-                    <span>{isBn ? 'প্যাকেজ কিনুন (১৫০ ৳ থেকে শুরু)' : 'Get Started (from 150 ৳)'}</span>
+                  <Link href="/checkout?plan=paid">
+                    <span>{isBn ? 'পেইড নিন (৫০০ ৳)' : 'Upgrade to Paid (500 ৳)'}</span>
                     <ArrowRight className="w-3.5 h-3.5 ml-1" />
                   </Link>
                 </Button>
@@ -569,7 +515,7 @@ export default function DashboardPage() {
               disabled={!subscription || (!isUnlimited && quotaRemaining === 0)}
               className="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold rounded-xl h-11 text-xs"
             >
-              <Link href={subscription && (isUnlimited || quotaRemaining > 0) ? '/apply' : '/checkout?plan=standard'}>
+              <Link href={subscription && (isUnlimited || quotaRemaining > 0) ? '/apply' : '/checkout?plan=paid'}>
                 <PlusCircle className="w-4 h-4 mr-1.5" />
                 <span>{isBn ? 'ওয়েব ফাইল তৈরি শুরু করুন' : 'Create Web File Now'}</span>
               </Link>
@@ -579,348 +525,29 @@ export default function DashboardPage() {
         </div>
 
         {/* Recent Visa Applications Table */}
-        <div className="bg-white rounded-2xl border border-[#EAEAEA] p-6 shadow-2xs space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <FileText className="w-5 h-5 text-black" />
-              <h2 className="text-base font-bold text-black font-bangla">
-                {isBn ? 'সাম্প্রতিক ভিসা আবেদনসমূহ' : 'Recent Visa Applications'}
-              </h2>
-            </div>
-            <Button asChild size="sm" variant="outline" className="rounded-xl text-xs font-semibold">
-              <Link href="/apply">
-                <PlusCircle className="w-3.5 h-3.5 mr-1 text-emerald-600" />
-                <span>{isBn ? '+ নতুন আবেদন' : '+ New Application'}</span>
-              </Link>
-            </Button>
-          </div>
-
-          {applications.length === 0 ? (
-            <div className="text-center py-10 px-4 text-xs text-[#888888] bg-[#FAFAFA] rounded-xl border border-[#EAEAEA] font-bangla space-y-2">
-              <p>
-                {isBn
-                  ? 'এখনো কোনো ভিসা আবেদন যোগ করা হয়নি। উপরের "ফর্ম পূরণ শুরু করুন" বাটনে ক্লিক করে আপনার প্রথম আবেদন শুরু করুন।'
-                  : 'No visa applications created yet. Click "+ New Application" to launch the 9-step automated filing engine.'}
-              </p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-[#EAEAEA] text-[#888888] font-semibold font-bangla">
-                    <th className="pb-3 px-3">{isBn ? 'আবেদনকারী ও পাসপোর্ট' : 'Applicant & Passport'}</th>
-                    <th className="pb-3 px-3">{isBn ? 'ভিসার ধরন' : 'Visa Type'}</th>
-                    <th className="pb-3 px-3">{isBn ? 'ধাপ' : 'Step'}</th>
-                    <th className="pb-3 px-3">{isBn ? 'অ্যাপ্লিকেশন আইডি / ফাইল নম্বর' : 'App ID / File No'}</th>
-                    <th className="pb-3 px-3">{isBn ? 'স্ট্যাটাস' : 'Status'}</th>
-                    <th className="pb-3 px-3 text-right">{isBn ? 'অ্যাকশন' : 'Actions'}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#EAEAEA]">
-                  {applications.map((app) => (
-                    <tr key={app.id} className="hover:bg-[#FAFAFA] transition-colors">
-                      <td className="py-3 px-3">
-                        <div className="font-bold text-black uppercase">{app.applicant_name}</div>
-                        <div className="font-mono text-[11px] text-[#666666] tracking-wider">{app.passport_number}</div>
-                      </td>
-                      <td className="py-3 px-3 font-semibold text-[#555555]">
-                        {app.visa_type === '544' && (isBn ? 'ট্যুরিস্ট' : 'Tourist (544)')}
-                        {app.visa_type === '543' && (isBn ? 'মেডিকেল' : 'Medical (543)')}
-                        {app.visa_type === '542' && (isBn ? 'বিজনেস' : 'Business (542)')}
-                        {app.visa_type !== '544' && app.visa_type !== '543' && app.visa_type !== '542' && app.visa_type}
-                      </td>
-                      <td className="py-3 px-3">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-zinc-100 text-zinc-800 border border-zinc-200 font-mono">
-                          {isBn ? `ধাপ ${app.current_step}/৯` : `Step ${app.current_step}/9`}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 font-mono text-[11px]">
-                        {app.web_file_number ? (
-                          <div className="space-y-1">
-                            <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 block w-fit">
-                              {app.web_file_number}
-                            </span>
-                            {app.status_message && (
-                              <div
-                                className="text-[10px] text-zinc-600 bg-zinc-50 border border-zinc-200 rounded px-1.5 py-0.5 inline-flex items-center gap-1 font-medium font-bangla max-w-[200px]"
-                                title={app.status_message}
-                              >
-                                <Globe className="w-2.5 h-2.5 text-blue-600 shrink-0" />
-                                <span className="truncate">{app.status_message}</span>
-                              </div>
-                            )}
-                          </div>
-                        ) : app.temp_id ? (
-                          <span className="font-medium text-zinc-700 bg-zinc-100 px-2 py-0.5 rounded">
-                            {app.temp_id}
-                          </span>
-                        ) : (
-                          <span className="text-[#999999]">-</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-3">
-                        {app.status === 'completed' && (
-                          <Badge className="bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-[10px]">
-                            <CheckCircle2 className="w-3 h-3 mr-1" />
-                            {isBn ? 'সম্পন্ন' : 'Completed'}
-                          </Badge>
-                        )}
-                        {app.status === 'processing' && (
-                          <Badge className="bg-amber-100 text-amber-800 border border-amber-300 font-bold text-[10px] animate-pulse">
-                            <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
-                            {isBn ? 'চলমান...' : 'Processing...'}
-                          </Badge>
-                        )}
-                        {app.status === 'queued' && (
-                          <div className="space-y-1">
-                            <Badge className="bg-sky-100 text-sky-800 border border-sky-300 font-bold text-[10px] animate-pulse flex items-center w-fit">
-                              <Clock className="w-3 h-3 mr-1 text-sky-600" />
-                              <span>{isBn ? `কিউতে #${app.queue_position ?? 1}` : `Queued #${app.queue_position ?? 1}`}</span>
-                            </Badge>
-                            {app.estimated_wait && (
-                              <div className="text-[10px] text-sky-700 bg-sky-50 border border-sky-200 rounded px-1.5 py-0.5 inline-flex items-center gap-1 font-medium font-bangla">
-                                <Sparkles className="w-2.5 h-2.5 text-sky-600 shrink-0" />
-                                <span>{app.estimated_wait}</span>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        {app.status === 'failed' && (
-                          <Badge
-                            className="bg-rose-100 text-rose-800 border border-rose-300 font-bold text-[10px] cursor-help"
-                            title={app.failure_reason || ''}
-                          >
-                            <AlertCircle className="w-3 h-3 mr-1" />
-                            {app.failed_step
-                              ? (isBn ? `ব্যর্থ (ধাপ ${app.failed_step})` : `Failed (Step ${app.failed_step})`)
-                              : (isBn ? 'ব্যর্থ' : 'Failed')}
-                          </Badge>
-                        )}
-                        {app.status === 'draft' && (
-                          <Badge variant="outline" className="text-zinc-600 border-zinc-300 font-bold text-[10px]">
-                            <Clock className="w-3 h-3 mr-1" />
-                            {isBn ? 'ড্রাফট' : 'Draft'}
-                          </Badge>
-                        )}
-                      </td>
-                      <td className="py-3 px-3 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {app.status === 'queued' && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setLiveModalAppId(app.id);
-                                setIsLiveModalOpen(true);
-                              }}
-                              className="h-7 px-2.5 text-[11px] font-bold rounded-lg border-sky-300 text-sky-700 bg-sky-50/60 hover:bg-sky-100 shadow-2xs"
-                              title={isBn ? 'কিউ স্ট্যাটাস ও লাইভ ট্র্যাকার দেখুন' : 'View queue status & live tracker'}
-                            >
-                              <Clock className="w-3 h-3 mr-1 text-sky-600" />
-                              <span>{isBn ? 'কিউ ট্র্যাকার' : 'Queue Tracker'}</span>
-                            </Button>
-                          )}
-
-                          {app.status === 'processing' && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setLiveModalAppId(app.id);
-                                setIsLiveModalOpen(true);
-                              }}
-                              className="h-7 px-2.5 text-[11px] font-bold rounded-lg border-emerald-300 text-emerald-700 bg-emerald-50/60 hover:bg-emerald-100 shadow-2xs"
-                            >
-                              <Terminal className="w-3 h-3 mr-1 text-emerald-600" />
-                              <span>{isBn ? 'লাইভ ফিড' : 'Live Feed'}</span>
-                            </Button>
-                          )}
-
-                          {(app.status === 'draft' || app.status === 'failed') && !app.temp_id && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={actionInProgress === app.id}
-                              onClick={() => handleRunApp(app.id)}
-                              className="h-7 px-2.5 text-[11px] font-bold rounded-lg border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                            >
-                              <Play className="w-3 h-3 mr-1 fill-emerald-600" />
-                              <span>{isBn ? 'রান করুন' : 'Run'}</span>
-                            </Button>
-                          )}
-
-                          {app.temp_id && app.status !== 'processing' && app.status !== 'completed' && (
-                            <>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  setEditResumeAppId(app.id);
-                                  setIsEditResumeModalOpen(true);
-                                }}
-                                className="h-7 px-2.5 text-[11px] font-bold rounded-lg border-indigo-200 text-indigo-700 bg-indigo-50/60 hover:bg-indigo-100 shadow-2xs"
-                                title={isBn ? 'তথ্য সংশোধন করে ধাপ ২ থেকে রিজিউম করুন' : 'Edit details & resume from Step 2'}
-                              >
-                                <Edit3 className="w-3 h-3 mr-1 text-indigo-600" />
-                                <span>{isBn ? 'এডিট ও রিজিউম' : 'Edit & Resume'}</span>
-                              </Button>
-
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={actionInProgress === app.id}
-                                onClick={() => handleResumeApp(app.id)}
-                                className="h-7 px-2.5 text-[11px] font-bold rounded-lg border-blue-200 text-blue-700 hover:bg-blue-50"
-                                title={isBn ? 'ধাপ ২ থেকে সরাসরি রিজিউম রান করুন' : 'Resume directly from Step 2'}
-                              >
-                                <RefreshCw className="w-3 h-3 mr-1" />
-                                <span>{isBn ? 'রিজিউম' : 'Resume'}</span>
-                              </Button>
-                            </>
-                          )}
-
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setQrModalApp(app);
-                              setIsQrModalOpen(true);
-                            }}
-                            className="h-7 px-2.5 text-[11px] font-bold rounded-lg border-zinc-300 text-zinc-800 bg-white hover:bg-zinc-50 shadow-2xs"
-                            title={isBn ? 'কিউআর কোড দেখুন ও ১-ক্লিকে পিডিএফ ডাউনলোড করুন' : 'View QR Code & 1-Click Download PDF'}
-                          >
-                            <QrCode className="w-3 h-3 mr-1 text-zinc-700" />
-                            <span>{isBn ? 'কিউআর' : 'QR Code'}</span>
-                          </Button>
-
-                          {(app.status === 'completed' || app.final_pdf_url || app.pdf_path || app.web_file_number) && (
-                            <Button
-                              asChild
-                              size="sm"
-                              variant="outline"
-                              className="h-7 px-2.5 text-[11px] font-bold rounded-lg border-emerald-300 text-emerald-800 bg-emerald-50/80 hover:bg-emerald-100 shadow-2xs"
-                            >
-                              <a
-                                href={`/api/applications/${app.id}/pdf`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                              >
-                                <Download className="w-3 h-3 mr-1 text-emerald-700" />
-                                <span>{isBn ? 'পিডিএফ ডাউনলোড' : 'Download PDF'}</span>
-                              </a>
-                            </Button>
-                          )}
-
-                          {app.status !== 'processing' && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              disabled={actionInProgress === app.id}
-                              onClick={() => handleDeleteApp(app.id)}
-                              className="h-7 w-7 p-0 text-zinc-400 hover:text-rose-600 rounded-lg"
-                              title={isBn ? 'মুছে ফেলুন' : 'Delete'}
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </Button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+        <ApplicationHistory
+          applications={applications}
+          isBn={isBn}
+          actionInProgress={actionInProgress}
+          onTrack={(applicationId) => {
+            setLiveModalAppId(applicationId);
+            setIsLiveModalOpen(true);
+          }}
+          onRun={handleRunApp}
+          onEditResume={(applicationId) => {
+            setEditResumeAppId(applicationId);
+            setIsEditResumeModalOpen(true);
+          }}
+          onResume={handleResumeApp}
+          onQrCode={(application) => {
+            setQrModalApp(application);
+            setIsQrModalOpen(true);
+          }}
+          onDelete={handleDeleteApp}
+        />
 
         {/* MFS Transactions Table */}
-        <div className="bg-white rounded-2xl border border-[#EAEAEA] p-6 shadow-2xs space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <CreditCard className="w-5 h-5 text-black" />
-              <h2 className="text-base font-bold text-black">
-                {isBn ? 'আমার এমএফএস পেমেন্ট হিস্ট্রি' : 'My MFS Payment History'}
-              </h2>
-            </div>
-            <Button asChild size="sm" variant="ghost" className="text-xs text-[#666666] hover:text-black">
-              <Link href="/checkout">
-                <span>{isBn ? '+ নতুন পেমেন্ট জমা দিন' : '+ Submit New Payment'}</span>
-              </Link>
-            </Button>
-          </div>
-
-          {transactions.length === 0 ? (
-            <div className="text-center py-10 text-xs text-[#888888] bg-[#FAFAFA] rounded-xl border border-[#EAEAEA]">
-              {isBn ? 'এখনো কোনো পেমেন্ট রেকর্ড নেই।' : 'No transaction records found.'}
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-[#EAEAEA] text-[#888888] font-semibold">
-                    <th className="pb-3 px-3">{isBn ? 'তারিখ' : 'Date'}</th>
-                    <th className="pb-3 px-3">{isBn ? 'প্ল্যান' : 'Plan'}</th>
-                    <th className="pb-3 px-3">{isBn ? 'পরিমাণ' : 'Amount'}</th>
-                    <th className="pb-3 px-3">{isBn ? 'পেমেন্ট মেথড' : 'Method'}</th>
-                    <th className="pb-3 px-3">{isBn ? 'প্রেরক নম্বর' : 'Sender Phone'}</th>
-                    <th className="pb-3 px-3">TrxID</th>
-                    <th className="pb-3 px-3 text-right">{isBn ? 'স্ট্যাটাস' : 'Status'}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#EAEAEA]">
-                  {transactions.map((trx) => (
-                    <tr key={trx.id} className="hover:bg-[#FAFAFA] transition-colors">
-                      <td className="py-3 px-3 text-[#555555]">
-                        {new Date(trx.created_at).toLocaleDateString(isBn ? 'bn-BD' : 'en-US', {
-                          day: '2-digit',
-                          month: 'short',
-                          year: 'numeric',
-                        })}
-                      </td>
-                      <td className="py-3 px-3 font-bold uppercase text-black">
-                        {trx.plan}
-                      </td>
-                      <td className="py-3 px-3 font-semibold text-black">
-                        ৳{trx.amount}
-                      </td>
-                      <td className="py-3 px-3">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-zinc-100 text-zinc-800 border border-zinc-200">
-                          {trx.mfs_method}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 font-mono text-[#555555]">
-                        {trx.sender_phone}
-                      </td>
-                      <td className="py-3 px-3 font-mono font-bold text-black">
-                        {trx.trx_id}
-                      </td>
-                      <td className="py-3 px-3 text-right">
-                        {trx.status === 'approved' && (
-                          <Badge className="bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-[10px]">
-                            <CheckCircle2 className="w-3 h-3 mr-1" />
-                            {isBn ? 'অনুমোদিত' : 'Approved'}
-                          </Badge>
-                        )}
-                        {trx.status === 'pending' && (
-                          <Badge className="bg-amber-100 text-amber-800 border border-amber-300 font-bold text-[10px]">
-                            <Clock className="w-3 h-3 mr-1" />
-                            {isBn ? 'পর্যালোচনাধীন' : 'In Review'}
-                          </Badge>
-                        )}
-                        {trx.status === 'rejected' && (
-                          <Badge className="bg-rose-100 text-rose-800 border border-rose-300 font-bold text-[10px]">
-                            <XCircle className="w-3 h-3 mr-1" />
-                            {isBn ? 'বাতিল' : 'Rejected'}
-                          </Badge>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+        <PaymentHistory transactions={transactions} isBn={isBn} />
 
       </div>
 

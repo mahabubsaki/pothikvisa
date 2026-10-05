@@ -12,13 +12,14 @@ import { executeStep8 } from '@/services/step8';
 import { executeStep9 } from '@/services/step9';
 import { executeCompletePartially } from '@/services/completePartially';
 import { VisaApplicantProfile } from '@/types/profile';
+import { sanitizeProfileDefaults } from '@/lib/profile-constants';
 import {
   getApplicationById,
   updateApplication,
   deductUserQuota,
   getUserSubscription,
 } from '@/lib/db';
-import { uploadLocalFileToStorage } from '@/lib/r2';
+import { downloadR2Buffer, uploadLocalFileToStorage } from '@/lib/r2';
 import { emitProgress } from '@/lib/progressEmitter';
 
 export interface AutomationResult {
@@ -33,73 +34,32 @@ export interface AutomationResult {
 
 /**
  * Resolves a local absolute path for photograph or passport PDF.
- * Checks local disk, public/uploads/applications/{id}/, relative paths, and remote URLs.
+ * Materializes only application-scoped private objects.
  */
 export async function resolveMediaFileOnDisk(
   applicationId: string,
   filePathOrUrl?: string | null,
   type: 'photo' | 'passport' = 'photo'
 ): Promise<string | null> {
-  const uploadsDir = path.resolve(process.cwd(), 'public', 'uploads');
-  const expectedLocal = path.join(
-    uploadsDir,
-    'applications',
-    applicationId,
-    type === 'photo' ? 'photo.jpg' : 'passport.pdf'
-  );
+  const runtimeDir = path.resolve(process.cwd(), 'data', 'runtime-media', applicationId);
 
-  // 1. Direct explicit file path on disk
-  if (filePathOrUrl && !filePathOrUrl.startsWith('http') && !filePathOrUrl.startsWith('/uploads/')) {
-    if (fs.existsSync(filePathOrUrl) && fs.statSync(filePathOrUrl).size > 0) {
-      return path.resolve(filePathOrUrl);
-    }
-  }
-
-  // 2. Local uploads folder for this application
-  if (fs.existsSync(expectedLocal) && fs.statSync(expectedLocal).size > 0) {
-    return expectedLocal;
-  }
-
-  // 3. If relative URL /uploads/...
-  if (filePathOrUrl && filePathOrUrl.startsWith('/uploads/')) {
-    const relClean = filePathOrUrl.replace(/^\/uploads\//, '');
-    const candidate = path.join(uploadsDir, relClean);
-    if (fs.existsSync(candidate) && fs.statSync(candidate).size > 0) {
+  // 1. Explicit paths are accepted only inside this application's managed folders.
+  if (filePathOrUrl && !filePathOrUrl.startsWith('storage:')) {
+    const candidate = path.resolve(filePathOrUrl);
+    if (candidate.startsWith(`${runtimeDir}${path.sep}`) && fs.existsSync(candidate) && fs.statSync(candidate).size > 0) {
       return candidate;
     }
   }
 
-  // 4. Remote HTTP URL (R2 or CDN)
-  if (filePathOrUrl && (filePathOrUrl.startsWith('http://') || filePathOrUrl.startsWith('https://'))) {
-    try {
-      const tempDir = path.resolve(process.cwd(), 'downloads', 'temp_media');
-      if (!fs.existsSync(tempDir)) {
-        fs.mkdirSync(tempDir, { recursive: true });
-      }
-      const ext = type === 'photo' ? '.jpg' : '.pdf';
-      const targetLocal = path.join(tempDir, `${applicationId}_${type}${ext}`);
-
-      const res = await fetch(filePathOrUrl);
-      if (res.ok) {
-        const arrayBuf = await res.arrayBuffer();
-        fs.writeFileSync(targetLocal, Buffer.from(arrayBuf));
-        console.log(`📥 Downloaded ${type} from storage: ${targetLocal} (${arrayBuf.byteLength} bytes)`);
-        return targetLocal;
-      }
-    } catch (err: unknown) {
-      console.warn(`⚠️ Failed to download media from ${filePathOrUrl}:`, err instanceof Error ? err.message : String(err));
-    }
-  }
-
-  // 5. Fallback to repository assets/photo.jpg or assets/passport.pdf
-  const fallbackAsset = path.resolve(
-    process.cwd(),
-    'assets',
-    type === 'photo' ? 'photo.jpg' : 'passport.pdf'
-  );
-  if (fs.existsSync(fallbackAsset) && fs.statSync(fallbackAsset).size > 0) {
-    console.log(`📌 Using fallback asset for ${type}: ${fallbackAsset}`);
-    return fallbackAsset;
+  // 3. Materialize an opaque private-storage object for browser upload.
+  if (filePathOrUrl?.startsWith('storage:')) {
+    const key = filePathOrUrl.slice('storage:'.length);
+    if (!key.startsWith(`applications/${applicationId}/`)) return null;
+    const buffer = await downloadR2Buffer(key);
+    fs.mkdirSync(runtimeDir, { recursive: true });
+    const target = path.join(runtimeDir, type === 'photo' ? 'photo.jpg' : 'passport.pdf');
+    fs.writeFileSync(target, buffer);
+    return target;
   }
 
   return null;
@@ -137,20 +97,22 @@ export async function runApplicationAutomation(applicationId: string): Promise<A
 
   // Check quota
   const sub = getUserSubscription(application.user_id);
-  if (!sub || (sub.plan !== 'agency' && sub.quota_used >= sub.quota_total)) {
+  if (!sub || (sub.quota_total !== null && sub.quota_used >= sub.quota_total)) {
     throw new Error('QUOTA_EXCEEDED');
   }
 
   // Parse application payload
   let profile: VisaApplicantProfile;
   try {
-    profile = JSON.parse(application.form_data_json);
+    profile = sanitizeProfileDefaults(JSON.parse(application.form_data_json));
   } catch (err: unknown) {
     throw new Error(`Invalid application form data JSON: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   // Deduct quota
-  deductUserQuota(application.user_id);
+  if (!deductUserQuota(application.user_id)) {
+    throw new Error('QUOTA_EXCEEDED');
+  }
 
   // Update DB status to processing
   updateApplication(applicationId, {
@@ -612,7 +574,7 @@ export async function resumeApplicationAutomation(applicationId: string): Promis
 
   let profile: VisaApplicantProfile;
   try {
-    profile = JSON.parse(application.form_data_json);
+    profile = sanitizeProfileDefaults(JSON.parse(application.form_data_json));
   } catch (err: unknown) {
     throw new Error(`Invalid application form data JSON: ${err instanceof Error ? err.message : String(err)}`);
   }

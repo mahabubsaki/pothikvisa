@@ -15,7 +15,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useLanguage } from '@/context/LanguageContext';
-import type { ApplicationItem } from '@/app/dashboard/page';
+import type { ApplicationItem } from '@/components/dashboard/ApplicationHistory';
 
 interface ApplicationQrModalProps {
   application: ApplicationItem | null;

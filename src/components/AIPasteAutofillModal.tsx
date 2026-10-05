@@ -141,7 +141,7 @@ export function AIPasteAutofillModal({
                   {isBn ? '✨ স্মার্ট এআই ফর্ম ফিলার' : '✨ Smart AI Form Filler'}
                 </h3>
                 <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 text-[10px] uppercase font-bold">
-                  {isBn ? 'এজেন্সি প্রো (৫০০ ৳)' : 'Agency Pro (500 ৳)'}
+                  {isBn ? 'পেইড (৫০০ ৳)' : 'Paid (500 ৳)'}
                 </Badge>
               </div>
               <p className="text-xs text-zinc-400 font-bangla mt-0.5">

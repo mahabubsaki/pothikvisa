@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getAuthenticatedUser } from '@/lib/currentAuth';
-import { getApplicationById } from '@/lib/db';
+import { requireApplicationAccess } from '@/lib/currentAuth';
+import { apiErrorResponse } from '@/lib/api-error';
 import { resumeApplicationAutomation } from '@/services/formRunner';
 
 export const runtime = 'nodejs';
@@ -11,20 +11,8 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const profile = await getAuthenticatedUser();
-    if (!profile) {
-      return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
-    }
-
     const { id } = await params;
-    const application = getApplicationById(id);
-    if (!application) {
-      return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
-    }
-
-    if (application.user_id !== profile.id && profile.role !== 'admin') {
-      return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
-    }
+    const { application } = await requireApplicationAccess(id, 'applications.run');
 
     if (!application.temp_id) {
       return NextResponse.json(
@@ -51,7 +39,6 @@ export async function POST(
       status: 'processing',
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Failed to resume automation';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiErrorResponse(error, 'Failed to resume automation');
   }
 }

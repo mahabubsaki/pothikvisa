@@ -14,14 +14,20 @@ export interface Step1Result {
 /**
  * Helper to poll until a condition returns true inside the page context.
  */
-async function waitForPageCondition(page: Page, checkFn: () => boolean, timeoutMs = 12000, intervalMs = 250): Promise<void> {
+async function waitForPageCondition(
+  page: Page,
+  checkFn: () => boolean,
+  timeoutMs = 12000,
+  intervalMs = 250,
+  conditionName = 'page condition'
+): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     const passed = await page.evaluate(checkFn);
     if (passed) return;
     await page.waitForTimeout(intervalMs);
   }
-  throw new Error(`Timed out waiting for page condition after ${timeoutMs}ms`);
+  throw new Error(`Timed out waiting for ${conditionName} after ${timeoutMs}ms`);
 }
 
 /**
@@ -46,26 +52,47 @@ export async function executeStep1(
         win.verify();
       }
     });
-    await waitForPageCondition(page, () => window.location.href.includes('/visa/Registration'));
+    await waitForPageCondition(
+      page,
+      () => window.location.href.includes('/visa/Registration'),
+      12000,
+      250,
+      '/visa/Registration page'
+    );
   }
 
   // 2. Select Country Applying From (triggers mission population)
-  await page.waitForSelector('#countryname_id');
+  const targetCountry = profile.countryApplyingFrom || 'BGD';
+  await page.waitForSelector('#countryname_id', { timeout: 15000 });
   await page.evaluate((val: string) => {
     const el = document.getElementById('countryname_id') as HTMLSelectElement;
     if (el) {
       el.value = val;
+      if (!el.value) {
+        for (let i = 0; i < el.options.length; i++) {
+          if (el.options[i].value === val || el.options[i].text.includes('BANGLADESH')) {
+            el.selectedIndex = i;
+            break;
+          }
+        }
+      }
       const win = window as unknown as IndianVisaPortalWindow;
       win.$?.(el).trigger('change');
     }
-  }, profile.countryApplyingFrom);
+  }, targetCountry);
   await page.waitForTimeout(600);
 
   // 3. Select Indian Mission (triggers nationality population via AJAX)
-  await waitForPageCondition(page, () => {
-    const mission = document.getElementById('missioncode_id') as HTMLSelectElement;
-    return !!(mission && mission.options && mission.options.length > 1);
-  });
+  await waitForPageCondition(
+    page,
+    () => {
+      const mission = document.getElementById('missioncode_id') as HTMLSelectElement;
+      return !!(mission && mission.options && mission.options.length > 1);
+    },
+    12000,
+    250,
+    'Indian Mission dropdown options'
+  );
 
   await page.evaluate((val: string) => {
     const el = document.getElementById('missioncode_id') as HTMLSelectElement;
@@ -78,26 +105,47 @@ export async function executeStep1(
   await page.waitForTimeout(1000);
 
   // 4. Select Nationality (triggers visa purpose population via AJAX)
-  await waitForPageCondition(page, () => {
-    const nat = document.getElementById('nationality_id') as HTMLSelectElement;
-    return !!(nat && nat.options && nat.options.length > 1);
-  });
+  const targetNationality = profile.nationality || 'BGD';
+  await waitForPageCondition(
+    page,
+    () => {
+      const nat = document.getElementById('nationality_id') as HTMLSelectElement;
+      return !!(nat && nat.options && nat.options.length > 1);
+    },
+    12000,
+    250,
+    'Nationality dropdown options'
+  );
 
   await page.evaluate((val: string) => {
     const el = document.getElementById('nationality_id') as HTMLSelectElement;
     if (el) {
       el.value = val;
+      if (!el.value) {
+        for (let i = 0; i < el.options.length; i++) {
+          if (el.options[i].value === val || el.options[i].text.includes('BANGLADESH')) {
+            el.selectedIndex = i;
+            break;
+          }
+        }
+      }
       const win = window as unknown as IndianVisaPortalWindow;
       win.$?.(el).trigger('change');
     }
-  }, profile.nationality);
+  }, targetNationality);
   await page.waitForTimeout(1200);
 
   // 5. Select Visa Purpose
-  await waitForPageCondition(page, () => {
-    const purpose = document.getElementById('visaPurposeDropdown') as HTMLSelectElement;
-    return !!(purpose && purpose.options && purpose.options.length > 1);
-  });
+  await waitForPageCondition(
+    page,
+    () => {
+      const purpose = document.getElementById('visaPurposeDropdown') as HTMLSelectElement;
+      return !!(purpose && purpose.options && purpose.options.length > 1);
+    },
+    12000,
+    250,
+    'Visa Purpose dropdown options'
+  );
 
   await page.evaluate((val: string) => {
     const el = document.getElementById('visaPurposeDropdown') as HTMLSelectElement;

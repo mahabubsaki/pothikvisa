@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireAdminUser } from '@/lib/currentAuth';
+import { apiErrorResponse } from '@/lib/api-error';
 import { getAllTransactions } from '@/lib/db';
 
 export async function GET(req: Request) {
@@ -18,13 +19,6 @@ export async function GET(req: Request) {
       transactions,
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Failed to fetch transactions';
-    if (message === 'UNAUTHORIZED' || message === 'FORBIDDEN') {
-      return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
-    }
-    return NextResponse.json(
-      { error: message },
-      { status: 500 }
-    );
+    return apiErrorResponse(error, 'Failed to fetch transactions');
   }
 }
