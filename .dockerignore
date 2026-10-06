@@ -1,0 +1,14 @@
+node_modules
+.next
+.git
+.env*.local
+.env
+.env.production
+data/*.db
+data/*.db-shm
+data/*.db-wal
+data/uploads
+data/runtime-media
+downloads
+browser-data
+*.log
